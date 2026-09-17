@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Hermes Fleet Daily Digest at 09:00
+After=network-online.target
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

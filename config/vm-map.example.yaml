@@ -1,0 +1,21 @@
+# /opt/fleet/vm-map.yaml
+host:
+  product: workstation   # workstation | player | fusion | virtualbox
+  version: "auto"
+  os: windows            # windows | linux | macos
+  notes: "Host hypervisor configuration"
+guests:
+  - name: fleet-controller
+    role: controller
+    autostart: true
+    order: 1
+    ip: 127.0.0.1
+    ssh_port: 22
+  - name: workload-worker-01
+    role: workload
+    autostart: true
+    order: 10
+    ip: 192.168.1.101
+    ssh:
+      user: ubuntu
+      key: /opt/fleet/ssh/fleet_ed25519

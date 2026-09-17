@@ -1,0 +1,8 @@
+[Unit]
+Description=Hermes Fleet Daily Digest and Diff Scanner
+After=network-online.target hermes-fleet-controller.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/fleet/bin/fleet-daily.py
+User=root

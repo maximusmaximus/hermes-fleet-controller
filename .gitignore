@@ -1,0 +1,25 @@
+# Secrets and Credentials
+secrets.env
+*.env
+*.key
+*.pem
+ssh/fleet_ed25519*
+credentials/
+device-auth.json
+
+# Ephemeral runtime state
+inventory.yaml
+inventory.prev.json
+inventory.pre-update.yaml
+changelog.jsonl
+models-cache.json
+*.log
+*.pid
+*.sock
+
+# Agent dynamic data
+agents/
+.cache/
+__pycache__/
+*.pyc
+.venv/

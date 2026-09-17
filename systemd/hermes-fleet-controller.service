@@ -1,0 +1,27 @@
+[Unit]
+Description=Hermes Fleet Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+ExecStartPre=-/usr/bin/podman rm -f hermes-fleet-controller
+ExecStart=/usr/bin/podman run --name hermes-fleet-controller \
+  --env-file /opt/fleet/secrets.env \
+  -e HERMES_AGENT_NAME=fleet-controller \
+  -v /opt/fleet/agents/fleet-controller:/opt/data:Z \
+  -v /opt/fleet/skills:/opt/fleet/skills:ro,Z \
+  -v /opt/fleet/bin:/opt/fleet/bin:ro,Z \
+  -v /opt/fleet/vm-map.yaml:/opt/fleet/vm-map.yaml:ro,Z \
+  -v /opt/fleet/inventory.yaml:/opt/fleet/inventory.yaml:Z \
+  -v /opt/fleet/changelog.jsonl:/opt/fleet/changelog.jsonl:Z \
+  -p 127.0.0.1:8642:8642 \
+  docker.io/nousresearch/hermes-agent:latest hermes gateway run
+ExecStop=/usr/bin/podman stop -t 10 hermes-fleet-controller
+ExecStopPost=-/usr/bin/podman rm -f hermes-fleet-controller
+
+[Install]
+WantedBy=multi-user.target default.target

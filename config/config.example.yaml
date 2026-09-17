@@ -1,0 +1,17 @@
+# /opt/fleet/agents/fleet-controller/config.yaml
+_config_version: 12
+model:
+  default: "kimi-k3"
+  provider: "custom"
+  base_url: "https://api.venice.ai/api/v1"
+  api_key: "${VENICE_API_KEY}"
+
+gateway:
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    allowed_users: "${TELEGRAM_ALLOWED_USERS}"
+
+platforms:
+  telegram:
+    allowed_chats: ["${TELEGRAM_ALLOWED_USERS}"]

@@ -1,0 +1,23 @@
+[Unit]
+Description=Hermes Agent %i
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=docker.io/nousresearch/hermes-agent:latest
+ContainerName=hermes-%i
+AutoUpdate=registry
+Volume=/opt/fleet/agents/%i:/opt/data:Z
+Volume=/opt/fleet/skills:/opt/fleet/skills:ro,Z
+EnvironmentFile=/opt/fleet/secrets.env
+Environment=HERMES_AGENT_NAME=%i
+PublishPort=127.0.0.1:8642:8642
+Restart=always
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target default.target

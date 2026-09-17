@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Hermes Fleet Controller — Automatic Installation Script
+set -e
+
+echo "============================================================"
+echo "    🚀 Installing Hermes Fleet Controller on Guest VM"
+echo "============================================================"
+
+FLEET_DIR="/opt/fleet"
+
+mkdir -p "${FLEET_DIR}"/{bin,skills,souls,config,agents/fleet-controller,systemd,quadlets,ssh}
+chmod 755 "${FLEET_DIR}"
+chmod 700 "${FLEET_DIR}/ssh"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Copy operational scripts
+cp -r "${SCRIPT_DIR}/bin/"* "${FLEET_DIR}/bin/"
+chmod +x "${FLEET_DIR}/bin/"*
+
+# Symlink status command to PATH
+ln -sf "${FLEET_DIR}/bin/status" /usr/local/bin/status
+
+# Copy skills and souls
+cp -r "${SCRIPT_DIR}/skills/"* "${FLEET_DIR}/skills/"
+cp -r "${SCRIPT_DIR}/souls/"* "${FLEET_DIR}/souls/"
+
+# Copy systemd units
+cp "${SCRIPT_DIR}/systemd/"* /etc/systemd/system/
+ln -sf /etc/systemd/system/hermes-fleet-controller.service /etc/systemd/system/hermes-gateway.service
+
+# Setup config template if not present
+if [ ! -f "${FLEET_DIR}/vm-map.yaml" ]; then
+  cp "${SCRIPT_DIR}/config/vm-map.example.yaml" "${FLEET_DIR}/vm-map.yaml"
+fi
+
+# Run interactive key setup
+echo ""
+echo "[*] Launching key attachment and credentials setup..."
+"${FLEET_DIR}/bin/fleet-attach-keys.sh"
+
+# Enable and start systemd units
+systemctl daemon-reload
+systemctl enable --now hermes-fleet-controller.service
+systemctl enable --now fleet-daily.timer
+systemctl enable --now fleet-update.timer
+
+echo ""
+echo "[✓] Hermes Fleet Controller successfully deployed!"
+echo "    • Status command: /opt/fleet/bin/status (or simply 'status')"
+echo "    • Daily digest timer: fleet-daily.timer (09:00 local)"
+echo "    • Weekly update timer: fleet-update.timer (Sun 03:30 local)"
