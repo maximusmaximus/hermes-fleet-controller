@@ -1,0 +1,11 @@
+[Unit]
+Description=Hermes Fleet Daily Agent Polling & Generalized Public Docs Sync
+After=network-online.target hermes-fleet-controller.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fleet/bin/fleet-sync-docs.py
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300

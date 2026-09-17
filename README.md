@@ -15,6 +15,7 @@ Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agen
 - **Dynamic Agent Spawning**: Includes the native `spawn-hermes-agent` skill allowing the controller to launch new specialized agents on demand with dedicated ports and systemd supervision.
 - **Inventory & Topology Discovery**: Tracks host virtual machines, sibling guests, and local containers, generating `/opt/fleet/inventory.yaml`.
 - **Daily Digest & Self-Healing**: Runs daily at 09:00 to diff inventory, auto-restart stopped agents, log changes to `changelog.jsonl`, and dispatch a Telegram digest.
+- **Daily Docs Sync & Sanitization (08:00 PST)**: Automatically polls all fleet agents daily for soul and skill updates or architectural learnings, rigorously redacts sensitive identifiers (API keys, bot tokens, user IDs, IPs, hostnames), and updates the public docs catalog.
 - **Automated Fleet Updates**: Runs weekly (Sunday 03:30) to pull new images, track newest model tiers for child agents, run health-checks, and roll back on failure.
 
 ---
@@ -29,6 +30,7 @@ hermes-fleet-controller/
 │   ├── venice-resolve-model.sh/.py   # Dynamic Venice tier resolver with caching
 │   ├── fleet-scan.py                 # Inventory builder & /status report generator
 │   ├── status                        # Shell wrapper for /status command
+│   ├── fleet-sync-docs.py            # Daily 08:00 PST agent polling & de-identified doc sync
 │   ├── fleet-daily.py                # Daily inventory diff & self-healing restarter
 │   ├── fleet-update.sh               # Self-update orchestrator with rollback guard
 │   ├── spawn-agent.sh                # Child agent spawn orchestrator
@@ -46,6 +48,7 @@ hermes-fleet-controller/
 │   └── vm-map.example.yaml           # VM topology map template
 ├── systemd/                          # Systemd service and timer units
 │   ├── hermes-fleet-controller.service
+│   ├── fleet-doc-sync.service & .timer
 │   ├── fleet-daily.service & .timer
 │   └── fleet-update.service & .timer
 ├── quadlets/                         # Rootful Podman Quadlet examples (Podman >= 4.4)

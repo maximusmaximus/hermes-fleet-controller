@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily 8:00 AM PST Hermes Fleet Doc Sync & Sanitization Timer
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+Unit=fleet-doc-sync.service
+
+[Install]
+WantedBy=timers.target
