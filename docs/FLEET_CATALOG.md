@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-09-16 22:54:01 UTC*
+*Automated public catalog generated on 2026-09-17 01:50:25 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -11,12 +11,13 @@ This catalog details the registered agent personas, tier allocations, and availa
 | Agent Name | Quality Tier | Default Model | Daily Allocation | Role / Capability | Status |
 |---|---|---|---|---|---|
 | `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | 🟢 Active |
+| `ha-agent` | `medium` | `deepseek-v4-1-flash` | `$2.0/day` | Home Assistant smart home operator and environmental sensor monitor | 🟢 Active |
 
 ---
 
 ## Fleet Skill Library
 
-Total registered skills: **59**
+Total registered skills: **60**
 
 | Skill Module | Description & Entrypoint |
 |---|---|
@@ -48,6 +49,7 @@ Total registered skills: **59**
 | [`hermes-agent`](../skills/hermes-agent/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`hermes-agent-skill-authoring`](../skills/hermes-agent-skill-authoring/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`himalaya`](../skills/himalaya/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`home-assistant-mcp`](../skills/home-assistant-mcp/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`humanizer`](../skills/humanizer/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`imessage`](../skills/imessage/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`inspecting-hermes-desktop-dom`](../skills/inspecting-hermes-desktop-dom/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |

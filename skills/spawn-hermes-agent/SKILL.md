@@ -1,6 +1,6 @@
 ---
 name: spawn-hermes-agent
-description: Spawn a specialized child Hermes agent in its own Podman container supervised by systemd, with resolved Venice model tiers and daily inference allocation.
+description: Spawn a specialized child Hermes agent in its own Podman container supervised by systemd, with resolved Venice model tiers, daily inference allocation, and optional MCP integration.
 ---
 
 # Spawn Hermes Agent Skill
@@ -10,7 +10,7 @@ Use this skill when asked to spawn, create, or launch a new child Hermes agent.
 ## Usage
 Run the spawn script:
 ```bash
-/opt/fleet/bin/spawn-agent.sh --name <agent-name> --quality <high|medium|low> --skill "<one-line description of the role>" [--daily-usd <amount>]
+/opt/fleet/bin/spawn-agent.sh --name <agent-name> --quality <high|medium|low> --skill "<one-line description of the role>" [--daily-usd <amount>] [--mcp-ha]
 ```
 
 ## Parameters
@@ -18,6 +18,7 @@ Run the spawn script:
 - `quality`: `high` | `medium` | `low`. Resolved dynamically from the newest live Venice models in that tier.
 - `skill`: Specialized mission or standing order for the child agent.
 - `daily-usd`: Daily inference budget in USD (default: `2.0`).
+- `--mcp-ha`: Automatically attaches <sibling-node> MCP server (`/api/mcp`) with bearer token credentials.
 
 ## Post-Spawn Actions
 - The child agent is automatically registered in `/opt/fleet/inventory.yaml`.
