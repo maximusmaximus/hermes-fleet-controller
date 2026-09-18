@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-09-17 08:00:26 UTC*
+*Automated public catalog generated on 2026-09-17 20:03:35 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -17,7 +17,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 ## Fleet Skill Library
 
-Total registered skills: **60**
+Total registered skills: **62**
 
 | Skill Module | Description & Entrypoint |
 |---|---|
@@ -49,6 +49,7 @@ Total registered skills: **60**
 | [`hermes-agent`](../skills/hermes-agent/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`hermes-agent-skill-authoring`](../skills/hermes-agent-skill-authoring/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`himalaya`](../skills/himalaya/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`home-assistant-lighting`](../skills/home-assistant-lighting/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`home-assistant-mcp`](../skills/home-assistant-mcp/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`humanizer`](../skills/humanizer/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`imessage`](../skills/imessage/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
@@ -76,6 +77,7 @@ Total registered skills: **60**
 | [`spike`](../skills/spike/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`systematic-debugging`](../skills/systematic-debugging/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`teams-meeting-pipeline`](../skills/teams-meeting-pipeline/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`telegram-interface`](../skills/telegram-interface/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`test-driven-development`](../skills/test-driven-development/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`weekly-review-planning`](../skills/weekly-review-planning/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`xlsx`](../skills/xlsx/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
