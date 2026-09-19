@@ -11,12 +11,13 @@ Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agen
   - `high` &rarr; Frontier / Flagship models (e.g. `kimi-k3`, `claude-opus`, `grok`)
   - `medium` &rarr; Fast mid-tier models (e.g. `deepseek-v4-flash`, `kimi-k2.x`, `glm`, `qwen`)
   - `low` &rarr; Lightweight sub-$0.20 models (e.g. `llama-3.2-3b`, `mercury-2.5`)
-- **Key Generation & Quota Allocation**: Automatically issues isolated Venice API sub-keys via `POST /api/v1/api_keys` and enforces daily inference budget limits (`consumptionLimit: { usd: X }, limitPeriod: "DAY"`) per child agent.
+- **Key Generation & Quota Allocation**: Automatically issues isolated Venice API sub-keys via `POST /api/v1/api_keys` and enforces daily inference budget limits (`consumptionLimit: { usd: X }, limitPeriod: "EPOCH"`) per child agent.
 - **Dynamic Agent Spawning**: Includes the native `spawn-hermes-agent` skill allowing the controller to launch new specialized agents on demand with dedicated ports and systemd supervision.
 - **Inventory & Topology Discovery**: Tracks host virtual machines, sibling guests, and local containers, generating `/opt/fleet/inventory.yaml`.
 - **Daily Digest & Self-Healing**: Runs daily at 09:00 to diff inventory, auto-restart stopped agents, log changes to `changelog.jsonl`, and dispatch a Telegram digest.
 - **Daily Docs Sync & Sanitization (08:00 PST)**: Automatically polls all fleet agents daily for soul and skill updates or architectural learnings, rigorously redacts sensitive identifiers (API keys, bot tokens, user IDs, IPs, hostnames), and updates the public docs catalog.
 - **Automated Fleet Updates**: Runs weekly (Sunday 03:30) to pull new images, track newest model tiers for child agents, run health-checks, and roll back on failure.
+- **Automated GitHub Publishing**: Integrated `publish-gh` tool with pre-flight zero-leak credential validation to safely push generalized souls, skills, and configuration to GitHub.
 
 ---
 
@@ -25,6 +26,7 @@ Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agen
 ```text
 hermes-fleet-controller/
 ├── bin/                              # Operational management scripts
+│   ├── fleet-publish-gh.sh           # Automated GitHub publisher with zero-leak verification
 │   ├── fleet-attach-keys.sh          # Credential setup & validation wizard
 │   ├── venice-manage-keys.py         # Sub-key generator & daily inference budget allocator
 │   ├── venice-resolve-model.sh/.py   # Dynamic Venice tier resolver with caching
@@ -39,9 +41,11 @@ hermes-fleet-controller/
 │   └── spawn-hermes-agent/           # Native skill allowing controller to spawn child agents
 ├── souls/                            # Persona definitions & standing orders
 │   ├── controller-soul.md            # Primary controller standing orders
-│   ├── worker-soul.md                # Task worker persona
+│   ├── ha-agent-soul.md              # Home Assistant specialist persona
+│   ├── trollbox-soul.md              # Trollbox / Grok specialist persona
 │   ├── devops-soul.md                # DevOps/SRE sentinel persona
-│   └── analyst-soul.md               # Research analyst persona
+│   ├── analyst-soul.md               # Research analyst persona
+│   └── worker-soul.md                # Task worker persona
 ├── config/                           # Environment & configuration templates
 │   ├── secrets.env.example           # Secrets template (0600 root:root)
 │   ├── config.example.yaml           # Hermes agent config template
@@ -63,7 +67,7 @@ hermes-fleet-controller/
 ### Prerequisites
 - Ubuntu Server / Desktop (24.04 LTS or 20.04+ LTS) or Debian
 - Podman (`sudo apt-get install -y podman`)
-- Python 3.8+ (`python3`, `python3-pip`, `python3-venv`, `jq`, `curl`)
+- Python 3.8+ (`python3`, `python3-pip`, `python3-venv`, `jq`, `curl`, `gh`)
 
 ### Deployment
 1. Clone this repository:
@@ -79,11 +83,41 @@ hermes-fleet-controller/
 
 ---
 
+## Publishing to GitHub (`publish-gh`)
+
+The included `publish-gh` tool provides safe, automated publishing to GitHub with automated pre-flight zero-leak credential checking.
+
+### Usage
+
+```bash
+# Interactive publish (creates or updates https://github.com/<user>/hermes-fleet-controller)
+publish-gh
+
+# Headless publish using a GitHub Personal Access Token (PAT)
+publish-gh --token ghp_xxxxxxxxxxxxxxxxxxxx
+
+# Publish as a private repository
+publish-gh --private
+
+# Dry run verification (runs full zero-leak scan without pushing)
+publish-gh --dry-run
+```
+
+### Pre-Flight Safety Verification
+Before any code or docs are pushed to GitHub, `publish-gh`:
+1. Reads `/opt/fleet/secrets.env` and all `/opt/fleet/agents/*/.env` & `key-meta.json` files.
+2. Checks all API keys, bot tokens, and passwords against the git history and working tree using exact fixed-string pattern matching.
+3. If ANY credential match is found, publishing is immediately aborted with a critical alert.
+4. If clean, it pushes to GitHub or creates the remote repository if it does not yet exist.
+
+---
+
 ## CLI & Telegram Commands
 
 | Command | Environment | Description |
 | :--- | :--- | :--- |
 | `status` or `/status` | CLI / Telegram | Generates real-time report of VM states, agent units, Venice latency, and versions |
+| `publish-gh` | CLI | Publishes sanitized fleet repository, souls, and skills to GitHub with zero-leak verification |
 | `/attach-keys` | CLI | Interactive wizard to attach/rotate Venice and Telegram credentials |
 | `/allocate-daily` | CLI | Set or adjust daily inference spending limit for a specific agent |
 | `/update-fleet` | CLI / Timer | Trigger immediate image update, model tier refresh, and health-check |
