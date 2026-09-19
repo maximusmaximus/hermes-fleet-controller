@@ -11,7 +11,7 @@ SECRETS_FILE="/opt/fleet/secrets.env"
 AGENTS_DIR="/opt/fleet/agents"
 REPO_NAME="hermes-fleet-controller"
 VISIBILITY="--public"
-GH_TOKEN=""
+GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
