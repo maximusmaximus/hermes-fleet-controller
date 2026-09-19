@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # /opt/fleet/bin/spawn-agent.sh
 # Spawns a new child Hermes agent with isolated config, resolved Venice model tier,
-# dedicated daily inference allocation, and systemd service supervision.
+# dedicated daily inference allocation, Home Assistant MCP server integration,
+# and systemd service supervision.
 
 set -e
 
@@ -9,6 +10,9 @@ NAME=""
 QUALITY="medium"
 SKILL_DESC=""
 DAILY_USD="2.0"
+MCP_HA="false"
+HA_URL="http://192.168.50.106:8123/api/mcp"
+HA_TOKEN="${HA_TOKEN:-${MCP_HOMEASSISTANT_API_KEY:-}}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,6 +32,18 @@ while [[ $# -gt 0 ]]; do
       DAILY_USD="$2"
       shift 2
       ;;
+    --mcp-ha)
+      MCP_HA="true"
+      shift
+      ;;
+    --ha-url)
+      HA_URL="$2"
+      shift 2
+      ;;
+    --ha-token)
+      HA_TOKEN="$2"
+      shift 2
+      ;;
     *)
       # Positional fallback: name quality [skill...]
       if [ -z "$NAME" ]; then
@@ -43,8 +59,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "$NAME" ]; then
-  echo "Error: agent name is required. Usage: spawn-agent.sh --name <name> --quality <high|medium|low> --skill <description> [--daily-usd <usd>]" >&2
+  echo "Error: agent name is required. Usage: spawn-agent.sh --name <name> --quality <high|medium|low> --skill <description> [--daily-usd <usd>] [--mcp-ha]" >&2
   exit 1
+fi
+
+# Auto-enable MCP HA if name contains ha or home-assistant
+if [[ "$NAME" =~ ha|home-assistant ]]; then
+  MCP_HA="true"
 fi
 
 # 1. Validate name
@@ -90,10 +111,34 @@ ${SKILL_DESC}
 - Your inference provider is Venice only.
 - Do not attempt to rebind controller model.
 EOF
+
+# Append custom soul if available
+if [ -f "/opt/fleet/souls/${NAME}-soul.md" ]; then
+  echo "" >> "${AGENT_DIR}/SOUL.md"
+  cat "/opt/fleet/souls/${NAME}-soul.md" >> "${AGENT_DIR}/SOUL.md"
+fi
 chmod 644 "${AGENT_DIR}/SOUL.md"
 
 # 5. Write config.yaml
-cat <<EOF > "${AGENT_DIR}/config.yaml"
+if [ "$MCP_HA" = "true" ]; then
+  cat <<EOF > "${AGENT_DIR}/config.yaml"
+_config_version: 12
+model:
+  default: "${MODEL_ID}"
+  provider: "custom"
+  base_url: "https://api.venice.ai/api/v1"
+  api_key: "\${VENICE_API_KEY}"
+mcp_servers:
+  homeassistant:
+    url: "${HA_URL}"
+    headers:
+      Authorization: "Bearer \${MCP_HOMEASSISTANT_API_KEY}"
+    enabled: true
+EOF
+  # Add MCP key to agent .env
+  echo "MCP_HOMEASSISTANT_API_KEY=${HA_TOKEN}" >> "${AGENT_DIR}/.env"
+else
+  cat <<EOF > "${AGENT_DIR}/config.yaml"
 _config_version: 12
 model:
   default: "${MODEL_ID}"
@@ -101,6 +146,7 @@ model:
   base_url: "https://api.venice.ai/api/v1"
   api_key: "\${VENICE_API_KEY}"
 EOF
+fi
 chmod 644 "${AGENT_DIR}/config.yaml"
 
 # Update key-meta with quality & skill
@@ -113,10 +159,14 @@ meta.update({
     'model': '${MODEL_ID}',
     'skill': '''${SKILL_DESC}''',
     'track': 'latest-${QUALITY}',
-    'daily_usd_limit': float('${DAILY_USD}')
+    'daily_usd_limit': float('${DAILY_USD}'),
+    'mcp_ha': '${MCP_HA}' == 'true'
 })
 json.dump(meta, open(path, 'w'), indent=2)
 "
+
+# Set permissions for container hermes user (UID 10000)
+chown -R 10000:10000 "$AGENT_DIR"
 
 # 6. Allocate port (controller keeps 8642; count existing child agents to increment)
 CHILD_COUNT=$(find /opt/fleet/agents -mindepth 1 -maxdepth 1 -type d | grep -v fleet-controller | wc -l)
@@ -141,8 +191,9 @@ ExecStart=/usr/bin/podman run --name hermes-${NAME} \\
   -e HERMES_AGENT_NAME=${NAME} \\
   -v ${AGENT_DIR}:/opt/data:Z \\
   -v /opt/fleet/skills:/opt/fleet/skills:ro,Z \\
+  -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \
   -p 127.0.0.1:${PORT}:8642 \\
-  docker.io/nousresearch/hermes-agent:latest
+  docker.io/nousresearch/hermes-agent:latest hermes gateway run
 ExecStop=/usr/bin/podman stop -t 10 hermes-${NAME}
 ExecStopPost=-/usr/bin/podman rm -f hermes-${NAME}
 
@@ -171,6 +222,7 @@ MSG=$(cat <<EOF
 • Quality: ${QUALITY} (model: ${MODEL_ID})
 • Daily Allocation: \$${DAILY_USD}/day
 • Skill: ${SKILL_DESC}
+• MCP HA: ${MCP_HA}
 • Unit: hermes-${NAME}.service (state: ${STATE}, port: ${PORT})
 EOF
 )

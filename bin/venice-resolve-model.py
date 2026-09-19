@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""
+/opt/fleet/bin/venice-resolve-model.py
+Resolves dynamic Venice model tiers prioritizing cost-efficiency and tool-calling capabilities.
+"""
+
 import os
 import sys
 import json
@@ -9,6 +14,7 @@ import urllib.error
 CACHE_FILE = "/opt/fleet/models-cache.json"
 SECRETS_FILE = "/opt/fleet/secrets.env"
 
+
 def get_api_key():
     if os.path.exists(SECRETS_FILE):
         with open(SECRETS_FILE) as f:
@@ -16,6 +22,7 @@ def get_api_key():
                 if line.startswith("VENICE_API_KEY="):
                     return line.split("=", 1)[1].strip().strip('"\'')
     return os.environ.get("VENICE_API_KEY", "")
+
 
 def fetch_fresh_models(api_key):
     req = urllib.request.Request(
@@ -26,57 +33,38 @@ def fetch_fresh_models(api_key):
         data = json.loads(resp.read().decode("utf-8"))
         return data.get("data", [])
 
+
 def resolve_tiers(models):
-    # Filter text models
-    text_models = [m for m in models if m.get("type") in ("text", "chat", None)]
+    # Filter text models that are not offline
+    text_models = [
+        m for m in models
+        if m.get("type") in ("text", "chat", None) and not m.get("model_spec", {}).get("offline", False)
+    ]
 
-    # Scoring bands
-    high_candidates = []
-    med_candidates = []
-    low_candidates = []
+    # Model preferences per tier:
+    # High: Frontier / Orchestrator models
+    high_picks = ["kimi-k3", "e2ee-kimi-k3-p", "claude-opus-5", "grok-4-20", "openai-gpt-55-pro"]
 
-    for m in text_models:
-        mid = m.get("id", "").lower()
-        created = m.get("created", 0)
-        # Check privacy preference in model_spec
-        spec = m.get("model_spec") or {}
-        privacy = spec.get("privacy", "").lower()
-        privacy_boost = 100000 if "private" in privacy else 0
+    # Medium: Cost-efficient, high-speed, reliable tool-calling models
+    # deepseek-v4-flash ($0.138/M in, $0.275/M out) is optimal balance of price and tool reasoning
+    med_picks = ["deepseek-v4-flash", "mistral-small-3-2-24b-instruct", "google-gemma-3-27b-it", "deepseek-v4-1-flash"]
 
-        # Tier classification
-        # High: kimi-k3, claude-opus, grok flagship, gpt-5, gpt-6, frontier
-        if any(x in mid for x in ["kimi-k3", "claude-opus", "grok-4", "grok-code", "gpt-5", "gpt-6"]):
-            high_candidates.append((created + privacy_boost, m["id"]))
+    # Low: Ultra-budget lightweight models ($0.05/M - $0.15/M)
+    low_picks = ["mercury-2-5", "qwen3-5-9b", "llama-3.2-3b", "zai-org-glm-4.7-flash"]
 
-        # Medium: deepseek, kimi-k2, glm, qwen-3-8, qwen3, minimax, venice-large, mistral
-        elif any(x in mid for x in ["deepseek", "kimi-k2", "glm", "qwen-3-8", "qwen3-6", "qwen3-5", "qwen-3-7", "minimax", "venice-large", "gemini-3-flash"]):
-            med_candidates.append((created + privacy_boost, m["id"]))
+    avail_ids = {m.get("id"): m for m in text_models}
 
-        # Low: llama-3.2-3b, qwen3-4b, venice-small, mercury, cheap/fast models
-        elif any(x in mid for x in ["3b", "4b", "small", "mercury", "nano", "flash-heretic", "uncensored"]):
-            low_candidates.append((created + privacy_boost, m["id"]))
-        else:
-            # Default fallbacks
-            if "large" in mid or "70b" in mid:
-                med_candidates.append((created + privacy_boost, m["id"]))
-            else:
-                low_candidates.append((created + privacy_boost, m["id"]))
-
-    # Sort each tier by score (created timestamp + privacy boost) descending
-    high_candidates.sort(key=lambda x: x[0], reverse=True)
-    med_candidates.sort(key=lambda x: x[0], reverse=True)
-    low_candidates.sort(key=lambda x: x[0], reverse=True)
-
-    high_pick = high_candidates[0][1] if high_candidates else "kimi-k3"
-    med_pick = med_candidates[0][1] if med_candidates else "qwen-3-8-flash"
-    low_pick = low_candidates[0][1] if low_candidates else "llama-3.2-3b"
+    high_choice = next((mid for mid in high_picks if mid in avail_ids), "kimi-k3")
+    med_choice = next((mid for mid in med_picks if mid in avail_ids), "deepseek-v4-flash")
+    low_choice = next((mid for mid in low_picks if mid in avail_ids), "mercury-2-5")
 
     return {
-        "high": high_pick,
-        "medium": med_pick,
-        "low": low_pick,
+        "high": high_choice,
+        "medium": med_choice,
+        "low": low_choice,
         "controller": "kimi-k3"
     }
+
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] not in ("high", "medium", "low", "controller", "all", "refresh"):
@@ -105,7 +93,7 @@ def main():
         with open(CACHE_FILE, "w") as f:
             json.dump(cache_data, f, indent=2)
         resolved = tiers
-    except Exception as e:
+    except Exception:
         # Fallback to cache
         if os.path.exists(CACHE_FILE):
             try:
@@ -116,15 +104,21 @@ def main():
                 pass
 
     if not resolved:
-        print("Error: Could not resolve models from Venice API and no valid cache found.", file=sys.stderr)
-        sys.exit(1)
+        # Hardcoded static fallbacks
+        resolved = {
+            "high": "e2ee-kimi-k3-p",
+            "medium": "deepseek-v4-flash",
+            "low": "mercury-2-5",
+            "controller": "kimi-k3"
+        }
 
     if target_tier == "all":
         print(json.dumps(resolved, indent=2))
     elif target_tier == "refresh":
         print(f"Successfully refreshed Venice cache ({CACHE_FILE})")
     else:
-        print(resolved.get(target_tier, "kimi-k3"))
+        print(resolved.get(target_tier, "deepseek-v4-flash"))
+
 
 if __name__ == "__main__":
     main()

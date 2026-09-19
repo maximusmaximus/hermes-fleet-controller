@@ -158,11 +158,15 @@ def scan_agents():
                         pass
 
                 cfg_file = os.path.join(adir, "config.yaml")
-                model_name = "unknown"
-                if os.path.exists(cfg_file):
+                model_name = meta.get("model", "unknown")
+                if model_name == "unknown" and os.path.exists(cfg_file):
                     for line in open(cfg_file):
-                        if line.strip().startswith("default:") or line.strip().startswith("model:"):
-                            model_name = line.split(":", 1)[1].strip().strip('"\'')
+                        sline = line.strip()
+                        if sline.startswith("default:") and len(sline.split(":", 1)[1].strip()) > 0:
+                            model_name = sline.split(":", 1)[1].strip().strip('"\'')
+                            break
+                        elif sline.startswith("model:") and len(sline.split(":", 1)[1].strip()) > 0:
+                            model_name = sline.split(":", 1)[1].strip().strip('"\'')
                             break
 
                 agents.append({
