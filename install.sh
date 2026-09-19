@@ -18,8 +18,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cp -r "${SCRIPT_DIR}/bin/"* "${FLEET_DIR}/bin/"
 chmod +x "${FLEET_DIR}/bin/"*
 
-# Symlink status command to PATH
+# Symlink status and publish-gh commands to PATH
 ln -sf "${FLEET_DIR}/bin/status" /usr/local/bin/status
+ln -sf "${FLEET_DIR}/bin/fleet-publish-gh.sh" /usr/local/bin/publish-gh
 
 # Copy skills and souls
 cp -r "${SCRIPT_DIR}/skills/"* "${FLEET_DIR}/skills/"
@@ -43,10 +44,13 @@ echo "[*] Launching key attachment and credentials setup..."
 systemctl daemon-reload
 systemctl enable --now hermes-fleet-controller.service
 systemctl enable --now fleet-daily.timer
+systemctl enable --now fleet-doc-sync.timer
 systemctl enable --now fleet-update.timer
 
 echo ""
 echo "[✓] Hermes Fleet Controller successfully deployed!"
-echo "    • Status command: /opt/fleet/bin/status (or simply 'status')"
+echo "    • Status command: status"
+echo "    • GitHub publish: publish-gh"
 echo "    • Daily digest timer: fleet-daily.timer (09:00 local)"
+echo "    • Doc sync timer: fleet-doc-sync.timer (08:00 PST)"
 echo "    • Weekly update timer: fleet-update.timer (Sun 03:30 local)"
