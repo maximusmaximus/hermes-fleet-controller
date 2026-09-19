@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-09-18 08:00:25 UTC*
+*Automated public catalog generated on 2026-09-18 17:05:16 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -12,6 +12,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 |---|---|---|---|---|---|
 | `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | 🟢 Active |
 | `ha-agent` | `medium` | `deepseek-v4-1-flash` | `$2.0/day` | Home Assistant smart home operator and environmental sensor monitor | 🟢 Active |
+| `trollbox` | `medium` | `deepseek-v4-1-flash` | `$2.0/day` | Trollbox MCP integration and Telegram community assistant | 🟢 Active |
 
 ---
 

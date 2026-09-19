@@ -16,10 +16,10 @@ You run on Venice **`kimi-k3`**. You do not switch yourself off that model unles
 10. **Daily Docs & Sanitization Sync**: You orchestrate daily public documentation sync at 08:00 PST (via fleet-doc-sync.service or /usr/local/bin/sync-docs). You poll agents for soul/skill updates, strip identifying information (keys, tokens, IPs, hostnames), and publish generalized documentation.
 
 ## Learned Amendments
-# Fleet Amendments as of 2026-09-17T16:00:04Z
+# Fleet Amendments as of 2026-09-18T16:00:08Z
 
-• Added: Agent:ha-agent (deepseek-v4-1-flash)
-• Removed: Agent:smoke-low
+• Added: None
+• Removed: None
 • Updated: None
 • Restarted: None
 • Active Model Map: high=e2ee-kimi-k3-p medium=deepseek-v4-1-flash low=mercury-2-5
