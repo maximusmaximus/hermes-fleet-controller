@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-09-20 08:00:14 UTC*
+*Automated public catalog generated on 2026-09-21 08:00:37 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -10,15 +10,15 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 | Agent Name | Quality Tier | Default Model | Daily Allocation | Role / Capability | Status |
 |---|---|---|---|---|---|
-| `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | ⚪ Inactive |
+| `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | 🟢 Active |
 | `ha-agent` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Home Assistant smart home operator and environmental sensor monitor | 🟢 Active |
-| `trollbox` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Trollbox MCP integration and Telegram community assistant | ⚪ Inactive |
+| `trollbox` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Trollbox MCP integration and Telegram community assistant | 🟢 Active |
 
 ---
 
 ## Fleet Skill Library
 
-Total registered skills: **62**
+Total registered skills: **63**
 
 | Skill Module | Description & Entrypoint |
 |---|---|
@@ -37,6 +37,7 @@ Total registered skills: **62**
 | [`codex`](../skills/codex/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`competitor-news-monitor`](../skills/competitor-news-monitor/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`computer-use`](../skills/computer-use/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`dashboard-pairing`](../skills/dashboard-pairing/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`design-md`](../skills/design-md/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`document-to-action-items`](../skills/document-to-action-items/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`docx`](../skills/docx/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
