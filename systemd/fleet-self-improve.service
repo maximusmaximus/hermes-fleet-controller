@@ -1,0 +1,11 @@
+[Unit]
+Description=Hermes Fleet Autonomous Self-Improvement PR Engine
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/fleet/bin/fleet-self-improve.py
+WorkingDirectory=/home/molt/hermes-fleet-controller
+User=root
+StandardOutput=journal
+StandardError=journal

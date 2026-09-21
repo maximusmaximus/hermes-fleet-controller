@@ -1,0 +1,18 @@
+[Unit]
+Description=Hermes Fleet Controller Real-Time Web Dashboard
+After=network-online.target hermes-fleet-controller.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/fleet/bin/fleet-dashboard.py
+WorkingDirectory=/opt/fleet
+EnvironmentFile=-/opt/fleet/secrets.env
+Restart=always
+RestartSec=5
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

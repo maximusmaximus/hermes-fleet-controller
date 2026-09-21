@@ -1,23 +1,63 @@
 # Hermes Fleet Controller
 
-Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agents** across virtual machines (VMware Workstation/Pro, VirtualBox, Proxmox, or Bare Metal Linux) with containerized execution via **Podman**, inference routing via **Venice AI**, and messaging management via **Telegram**.
+Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agents** across virtual machines (VMware Workstation/Pro, VirtualBox, Proxmox, or Bare Metal Linux) with containerized execution via **Podman**, inference routing via **Venice AI**, remote management via **Cloudflare DNS & Tunnels**, real-time browser control via a **FastAPI Web Dashboard**, and messaging management via **Telegram**.
 
 ---
 
 ## Key Features
 
-- **Controller Architecture**: Runs a persistent primary Hermes Controller (`fleet-controller`) locked to Venice `kimi-k3` with s6-overlay process supervision and boot-without-login reliability.
-- **Dynamic Model Tier Resolution**: Automatically polls the live Venice API (`/api/v1/models`) to resolve the newest frontier and private text models by quality band:
-  - `high` &rarr; Frontier / Flagship models (e.g. `kimi-k3`, `claude-opus`, `grok`)
-  - `medium` &rarr; Fast mid-tier models (e.g. `deepseek-v4-flash`, `kimi-k2.x`, `glm`, `qwen`)
-  - `low` &rarr; Lightweight sub-$0.20 models (e.g. `llama-3.2-3b`, `mercury-2.5`)
-- **Key Generation & Quota Allocation**: Automatically issues isolated Venice API sub-keys via `POST /api/v1/api_keys` and enforces daily inference budget limits (`consumptionLimit: { usd: X }, limitPeriod: "EPOCH"`) per child agent.
-- **Dynamic Agent Spawning**: Includes the native `spawn-hermes-agent` skill allowing the controller to launch new specialized agents on demand with dedicated ports and systemd supervision.
-- **Inventory & Topology Discovery**: Tracks host virtual machines, sibling guests, and local containers, generating `/opt/fleet/inventory.yaml`.
-- **Daily Digest & Self-Healing**: Runs daily at 09:00 to diff inventory, auto-restart stopped agents, log changes to `changelog.jsonl`, and dispatch a Telegram digest.
-- **Daily Docs Sync & Sanitization (08:00 PST)**: Automatically polls all fleet agents daily for soul and skill updates or architectural learnings, rigorously redacts sensitive identifiers (API keys, bot tokens, user IDs, IPs, hostnames), and updates the public docs catalog.
-- **Automated Fleet Updates**: Runs weekly (Sunday 03:30) to pull new images, track newest model tiers for child agents, run health-checks, and roll back on failure.
-- **Automated GitHub Publishing**: Integrated `publish-gh` tool with pre-flight zero-leak credential validation to safely push generalized souls, skills, and configuration to GitHub.
+- **Real-Time Web Dashboard (Port 8650)**: Reactive browser-based terminal dashboard with live WebSocket feeds for CPU/RAM/Disk metrics, container status, and streaming `journalctl` logs.
+- **Zero-Trust Device Pairing**: Cryptographically signed pairing engine with time-limited 6-digit PINs, IP rate-limiting, and HMAC-SHA256 session tokens for secure remote pairing from phones and laptops.
+- **Cloudflare DNS & Tunnel Integration**: Outbound encrypted tunnel supporting instant Quick Tunnels (`*.trycloudflare.com`) or named custom domains without exposing public ports.
+- **Venice E2EE Confidential Inference**: Direct integration with Venice's hardware-isolated confidential enclaves (Intel TDX / SEV-SNP). Includes a dedicated UI toggle to switch agents between standard inference and End-to-End Encrypted (E2EE) enclaves.
+- **Venice Privacy Models Explorer**: Live catalog displaying all 12 E2EE hardware-enclave models and 56 Zero Data Retention (ZDR) models with token costs and one-click agent deployment.
+- **Granular Per-Agent Network Firewall**: Dynamic iptables packet filtering allowing per-agent switches between **Full Internet**, **Restricted (AI & LAN only with DNS port 53 whitelist)**, and **Isolated (Air-Gapped)**.
+- **Venice AI Agent Factory**: Frontier `kimi-k3` prompt-to-agent authoring that generates custom `SOUL.md` personas and `SKILL.md` workflows, sets `$0.50/day` default quotas, validates bot token collisions, and boots containers.
+- **Autonomous Self-Improvement & GitHub PR Bot**: Weekly feedback analyzer that gathers top 50 error traces, opens GitHub issues, uses a dedicated **$1.00 Venice API key** to synthesize bug fixes, executes syntax checks (`py_compile`), passes zero-leak scans, and submits automated GitHub Pull Requests with a human-in-the-loop merge policy.
+- **Easy Daily Swarm & MCP Reporting**: Daily 09:00 digest discovering all active Model Context Protocol (MCP) servers (Home Assistant, Trollbox, custom tools) with 15-second health probes and smart Telegram 4000-char message chunking.
+- **500 MB Resource Governance**: Strict `--memory 500m` container ceilings, 500 MB backup vault quotas with automatic oldest-first rotation, 500 MB journal ceilings, and SQLite WAL truncation (`PRAGMA wal_checkpoint(TRUNCATE)`).
+
+---
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+    subgraph RemoteAccess["1. Remote Access & Zero-Trust Security"]
+        UserDevice["📱 Remote Device\n(Phone / Laptop)"] --> CFEdge["Cloudflare Edge & DNS\n(fleet.domain / *.trycloudflare.com)"]
+        CFEdge --> CFTunnel["cloudflared tunnel\n(fleet-tunnel.service)"]
+        CFTunnel --> AuthGate["Zero-Trust Device Pairing\n(Rate-Limited 6-Digit PIN & HMAC Tokens)"]
+    end
+
+    subgraph ControlPlane["2. Real-Time Web Dashboard (Port 8650)"]
+        AuthGate --> WebUI["Reactive Web Dashboard\n(FastAPI + WebSockets + Terminal Theme)"]
+        WebUI --> WSMetrics["/ws/metrics (Live CPU, 500M RAM, Disk)"]
+        WebUI --> WSLogs["/ws/logs/{agent} (journalctl streaming)"]
+        WebUI --> AgentControls["Agentic Controls, Quotas & Network Switches"]
+        WebUI --> PrivacyCatalog["🔒 Privacy & Encrypted Models Panel\n(Live Venice E2EE / TEE Catalog)"]
+    end
+
+    subgraph PrivacyEngine["3. Venice E2EE & Privacy Inference Layer"]
+        AgentControls --> EncryptToggle["🔒 Encryption Switch [OFF / ON]\n(Auto-swaps model to E2EE Enclave equivalent)"]
+        EncryptToggle --> VeniceResolve["venice-resolve-model.py\n(Tiers: e2ee-kimi-k3-p, e2ee-deepseek-v4-flash, e2ee-qwen-2-5-7b-p)"]
+        VeniceResolve --> VeniceAPI["Venice.ai API\n[E2EE Enclave | ZDR Private | Anonymized]"]
+    end
+
+    subgraph AgentFactory["4. AI Agent Factory (Venice kimi-k3)"]
+        AgentControls --> FactoryPrompt["User Purpose & Spec"]
+        FactoryPrompt --> VeniceFrontier["Venice AI (kimi-k3 / Flagship)\nGenerates SOUL.md & SKILL.md"]
+        VeniceFrontier --> TokenValidator["Bot Token Collision Validator\n(Prevents HTTP 409 Conflicts)"]
+        TokenValidator --> KeyMinting["Venice Key Engine\nToggle: Unique Key ($0.50/day) vs Shared Key"]
+        KeyMinting --> SpawnUnit["spawn-agent.sh\n(Podman + systemd + 500M RAM limit)"]
+    end
+
+    subgraph NetworkFirewall["5. Per-Agent Network Egress Control"]
+        AgentControls --> NetToggle["Internet Access Switch\n[Full | Restricted AI-Only | Isolated]"]
+        NetToggle --> IPTables["fleet-firewall.sh (iptables / bridge rules)\nEgress Monitoring & Packet Filtering"]
+        IPTables --> DNSWhitelist["DNS Port 53 & LAN 10.88.x.x Whitelist\n(Ensures Venice API Resolution)"]
+        DNSWhitelist --> Containers["Agent Containers\n(10.88.x.x Podman Bridge)"]
+    end
+```
 
 ---
 
@@ -26,13 +66,21 @@ Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agen
 ```text
 hermes-fleet-controller/
 ├── bin/                              # Operational management scripts
+│   ├── fleet-dashboard.py            # FastAPI + WebSockets real-time control center (port 8650)
+│   ├── fleet-pair.py / fleet-pair    # Zero-trust device pairing & HMAC token generator
+│   ├── fleet-tunnel.sh               # Automated Cloudflare Tunnel runner
+│   ├── fleet-firewall.sh             # Granular iptables per-agent egress controller
+│   ├── fleet-factory.py              # Venice frontier prompt-to-agent synthesis engine
+│   ├── fleet-report.py / fleet-report# Daily operations & MCP catalog digest with chunking
+│   ├── fleet-self-improve.py         # Autonomous weekly feedback & GitHub PR generator ($1 key)
+│   ├── fleet-rollback.sh             # 1-command emergency rollback to verified stable commit
 │   ├── fleet-audit.sh                # Pre-flight system resource audit & swarm capacity sizing
-│   ├── fleet-backup.sh               # Atomic SQLite VACUUM INTO hot-backup engine (500MB cap)
+│   ├── fleet-backup.sh               # Atomic SQLite VACUUM INTO & WAL checkpoint hot-backup
 │   ├── fleet-restore.sh              # One-click disaster recovery & snapshot restoration
 │   ├── fleet-publish-gh.sh           # Automated GitHub publisher with zero-leak verification
 │   ├── fleet-attach-keys.sh          # Credential setup & validation wizard
 │   ├── venice-manage-keys.py         # Sub-key generator & daily inference budget allocator
-│   ├── venice-resolve-model.sh/.py   # Dynamic Venice tier resolver with caching
+│   ├── venice-resolve-model.sh/.py   # Dynamic Venice tier resolver with E2EE & privacy catalog
 │   ├── fleet-scan.py                 # Inventory builder & /status report generator
 │   ├── status                        # Shell wrapper for /status command
 │   ├── fleet-sync-docs.py            # Daily 08:00 PST agent polling & de-identified doc sync
@@ -40,168 +88,127 @@ hermes-fleet-controller/
 │   ├── fleet-update.sh               # Self-update orchestrator with rollback guard
 │   ├── spawn-agent.sh                # Child agent spawn orchestrator
 │   └── fleet-telegram-notify.sh      # Telegram notification dispatcher
-├── skills/                           # Hermes skill library
-│   └── spawn-hermes-agent/           # Native skill allowing controller to spawn child agents
-├── souls/                            # Persona definitions & standing orders
-│   ├── controller-soul.md            # Primary controller standing orders
-│   ├── ha-agent-soul.md              # Home Assistant specialist persona
-│   ├── trollbox-soul.md              # Trollbox / Grok specialist persona
-│   ├── devops-soul.md                # DevOps/SRE sentinel persona
-│   ├── analyst-soul.md               # Research analyst persona
-│   └── worker-soul.md                # Task worker persona
 ├── config/                           # Environment & configuration templates
 │   ├── secrets.env.example           # Secrets template (0600 root:root)
 │   ├── config.example.yaml           # Hermes agent config template
 │   └── vm-map.example.yaml           # VM topology map template
 ├── systemd/                          # Systemd service and timer units
+│   ├── fleet-dashboard.service       # Supervises Web Dashboard
+│   ├── fleet-tunnel.service          # Supervises Cloudflare Tunnel
+│   ├── fleet-report.service & .timer # Daily 09:00 operations & MCP tool report
+│   ├── fleet-self-improve.service & .timer # Sunday 23:00 self-improvement PR loop
 │   ├── hermes-fleet-controller.service
 │   ├── fleet-doc-sync.service & .timer
 │   ├── fleet-daily.service & .timer
-│   └── fleet-update.service & .timer
-├── quadlets/                         # Rootful Podman Quadlet examples (Podman >= 4.4)
+│   └── fleet-backup.service & .timer
 ├── install.sh                        # One-line automated installation script
 └── README.md
 ```
 
 ---
 
+## Production Safeguards Matrix
+
+| Vulnerability / Edge Case | Failure Mode Without Safeguard | Built-In Safeguard Solution |
+| :--- | :--- | :--- |
+| **1. Self-Improvement Hallucination Spiral** | Agent authors broken Python syntax or bad prompt, merges it, and cascades errors weekly. | **3-Layer Gate**: Automated `py_compile` check, zero-leak scan, **Human-in-the-loop merge (no auto-merge)**, plus `fleet-rollback` command. |
+| **2. Pairing PIN Brute-Force** | Web crawlers on Cloudflare HTTPS URL brute-force 6-digit PIN (1,000,000 combinations). | **Rate-Limiter**: 5 failed attempts locks IP for 15 minutes. PIN expires in 10 minutes. Signed HMAC-SHA256 session tokens. |
+| **3. Firewall Egress DNS Failure** | Blocking WAN on "Restricted" container breaks UDP 53, preventing resolution of `api.venice.ai`. | **Port 53 & Subnet Whitelist**: `fleet-firewall.sh` always permits UDP/TCP 53 (DNS) and local bridge subnet (`10.88.0.0/16`). |
+| **4. Telegram 4096-Char Overflow** | Daily report with multiple agents & MCP tools exceeds 4096 chars &rarr; Telegram HTTP 400 rejection. | **Smart Message Chunking**: `fleet-report.py` paginates reports into < 4000-char blocks at section boundaries or attaches `.md`. |
+| **5. Telegram Token Collisions** | Reusing a bot token between 2 agents causes `HTTP 409 Conflict: terminated by other getUpdates`. | **Pre-Flight Token Validation**: `fleet-factory.py` verifies entered token is not already active in `/opt/fleet/agents/*/.env`. |
+| **6. Zombie MCP Server Hangs** | Remote MCP server (Home Assistant/Trollbox) drops connection, causing LLM loop to freeze indefinitely. | **Strict 15s Timeout & Health Probe**: Sets 15-second socket timeout on MCP calls; probes health before cataloging tools. |
+| **7. SQLite WAL Bloat & Disk Exhaustion** | 24/7 agents accumulate uncheckpointed SQLite `-wal` files, pushing 25GB disk to 100%. | **WAL Truncation & Disk Throttle**: Executes `PRAGMA wal_checkpoint(TRUNCATE)` before backup; alerts Telegram if disk < 1.5GB. |
+
+---
+
 ## Quick Start Installation
 
-### Prerequisites
-- Ubuntu Server / Desktop (24.04 LTS or 20.04+ LTS) or Debian
-- Podman (`sudo apt-get install -y podman`)
-- Python 3.8+ (`python3`, `python3-pip`, `python3-venv`, `jq`, `curl`, `gh`)
+```bash
+# Clone the repository
+git clone https://github.com/maximusmaximus/hermes-fleet-controller.git
+cd hermes-fleet-controller
 
-### Deployment
-1. Clone this repository:
+# Execute installer (installs dependencies, configures systemd units and symlinks)
+sudo ./install.sh
+```
+
+---
+
+## Device Pairing & Remote Access
+
+To pair your mobile device or remote laptop with the controller Web Dashboard:
+
+1. View your public Cloudflare URL:
    ```bash
-   git clone https://github.com/your-org/hermes-fleet-controller.git
-   cd hermes-fleet-controller
+   cat /opt/fleet/tunnel-url.txt
    ```
-2. Run the automated installer with root privileges:
+2. Generate a 6-digit pairing PIN on the controller terminal:
    ```bash
-   sudo ./install.sh
+   fleet-pair
    ```
-3. Follow the interactive prompt to attach your **Venice API Key** (Admin key recommended for child quota allocation), **Telegram Bot Token**, and **Allowed User ID**.
+3. Open the Cloudflare URL on your device and enter the 6-digit PIN. Once authenticated, an HMAC-SHA256 session cookie is stored in your browser.
 
 ---
 
-## Publishing to GitHub (`publish-gh`)
+## Venice Privacy & Encryption Controls
 
-The included `publish-gh` tool provides safe, automated publishing to GitHub with automated pre-flight zero-leak credential checking.
+The controller integrates with Venice's privacy modes:
+- **🔒 End-to-End Encrypted (E2EE)**: Inference runs inside confidential hardware enclaves (Intel TDX / SEV-SNP). Tokens are encrypted client-side and only decrypted inside the enclave.
+- **🛡️ Zero Data Retention (ZDR)**: Bare-metal execution on Venice infrastructure with zero request logging.
 
-### Usage
-
+### Managing Privacy & Models:
 ```bash
-# Interactive publish (creates or updates https://github.com/<user>/hermes-fleet-controller)
-publish-gh
+# View all active Venice E2EE and ZDR privacy models with token costs
+venice-resolve-model privacy-models
 
-# Headless publish using a GitHub Personal Access Token (PAT)
-publish-gh --token ghp_xxxxxxxxxxxxxxxxxxxx
+# Resolve top model in each encrypted tier
+venice-resolve-model high-e2ee
+venice-resolve-model medium-e2ee
+venice-resolve-model low-e2ee
 
-# Publish as a private repository
-publish-gh --private
-
-# Dry run verification (runs full zero-leak scan without pushing)
-publish-gh --dry-run
+# Toggle an agent to E2EE mode via Web Dashboard switch or API:
+curl -X POST http://127.0.0.1:8650/api/agents/ha-agent/privacy \
+     -H "Content-Type: application/json" \
+     -d '{"encrypted": true}'
 ```
 
-### Pre-Flight Safety Verification
-Before any code or docs are pushed to GitHub, `publish-gh`:
-1. Reads `/opt/fleet/secrets.env` and all `/opt/fleet/agents/*/.env` & `key-meta.json` files.
-2. Checks all API keys, bot tokens, and passwords against the git history and working tree using exact fixed-string pattern matching.
-3. If ANY credential match is found, publishing is immediately aborted with a critical alert.
-4. If clean, it pushes to GitHub or creates the remote repository if it does not yet exist.
-
 ---
 
-## Atomic Hot-Backup & Disaster Recovery (`fleet-backup` / `fleet-restore`)
+## Network Firewall Controls
 
-The fleet includes an automated zero-downtime backup engine utilizing SQLite's atomic `VACUUM INTO` API to guarantee database consistency without locking active agent sessions.
-
-### Usage
+Manage egress permissions per agent:
 
 ```bash
-# Capture immediate atomic hot-snapshot
-fleet-backup
+# Grant unrestricted external WAN access
+fleet-firewall ha-agent full
 
-# List all available snapshots in the vault
-fleet-restore --list
+# Restrict to Venice AI, DNS (UDP/TCP 53), and local bridge subnet
+fleet-firewall ha-agent restricted
 
-# Restore the newest available snapshot
-fleet-restore --latest
+# Completely air-gap container from all outbound traffic
+fleet-firewall ha-agent isolated
 
-# Restore a specific snapshot archive
-fleet-restore --file /opt/fleet/backups/fleet-backup-20260920_120000.tar.gz
+# Inspect current firewall status
+fleet-firewall ha-agent status
 ```
-
-### 500 MB Fleet Resource Governance
-To ensure high stability and avoid resource starvation on resource-constrained nodes:
-- **Agent Memory Ceiling**: Every agent container is capped at **500 MB RAM** (`--memory 500m`).
-- **Backup Vault Quota**: Total backup storage in `/opt/fleet/backups` is hard-capped at **500 MB** with automatic oldest-first snapshot rotation.
-- **Journal Log Ceiling**: Systemd journal log storage is capped at **500 MB** (`SystemMaxUse=500M`).
-
-## Pre-Flight System Audit & Swarm Sizing (`fleet-audit`)
-
-The integrated system audit tool validates node hardware, storage hygiene, and egress network reachability, providing calculated sizing recommendations for your swarm.
-
-### Usage
-
-```bash
-# Run interactive system audit and swarm sizing report
-fleet-audit
-
-# Run system audit and automatically apply recommended storage optimizations
-fleet-audit --tune
-
-# Output audit metrics as JSON for programmatic agent consumption
-fleet-audit --json
-```
-
-### Audited Metrics & Swarm Sizing Logic
-- **Compute & Memory**: Evaluates vCPUs, current load, and available RAM. Sizing computes `floor((available_ram - 1.5GB) / 500MB)`.
-- **Disk Storage**: Evaluates root partition capacity and free space. Warns if usage &ge; 80% and blocks/flags critical storage exhaustion at &ge; 90%.
-- **Network Reachability**: Verifies TCP egress to Venice AI (`api.venice.ai:443`), Telegram (`api.telegram.org:443`), and GitHub (`github.com:443`).
-- **Hygiene Auto-Tuning (`--tune`)**: Establishes 500MB systemd journal ceiling, adjusts Snap retention to 2 revisions, and pre-allocates shared fleet workspaces.
 
 ---
 
-## Inter-Agent Collaboration & Shared Stack Resources
+## Command Reference
 
-All fleet agents share coordinated communication and storage layers:
-- **Shared Service Registry (`/opt/fleet/registry.json`)**: Live discovery registry populated on every scan detailing active agent roles, models, ports, endpoints, and daily USD inference limits.
-- **Shared Agent Workspace (`/opt/fleet/shared-workspace`)**: High-speed bridge mounted with read-write permissions into every agent container (`/opt/fleet/shared-workspace:rw,Z`), enabling agents to pass files, code reviews, and structured task deliverables directly to sibling agents.
-- **Global Skill Library (`/opt/fleet/skills`)**: Mounted read-only into all containers so custom skills are immediately discoverable across the swarm.
-
----
-
-## CLI & Telegram Commands
-
-| Command | Environment | Description |
+| Command | Interface | Description |
 | :--- | :--- | :--- |
-| `status` or `/status` | CLI / Telegram | Generates real-time report of VM states, agent units, Venice latency, and versions |
-| `fleet-audit` | CLI | Pre-flight system resource audit, storage hygiene check, and swarm capacity advisor |
-| `fleet-backup` | CLI / Timer | Captures atomic zero-lock SQLite snapshot across all agents (500MB vault ceiling) |
-| `fleet-restore` | CLI | One-click disaster recovery restoring fleet state and databases |
-| `publish-gh` | CLI | Publishes sanitized fleet repository, souls, and skills to GitHub with zero-leak verification |
-| `/attach-keys` | CLI | Interactive wizard to attach/rotate Venice and Telegram credentials |
-| `/allocate-daily` | CLI | Set or adjust daily inference spending limit for a specific agent |
-| `/update-fleet` | CLI / Timer | Trigger immediate image update, model tier refresh, and health-check |
-
----
-
-## Adding Custom Souls & Skills
-
-- **New Souls**: Add markdown persona files into `souls/<name>-soul.md`. These are injected into `SOUL.md` when spawning new agents.
-- **New Skills**: Add skill folders into `skills/<skill-name>/SKILL.md`. All skills in this directory are mounted into containers at `/opt/fleet/skills:ro` and instantly discoverable by agents.
-
----
-
-## Security
-
-- All API keys, Telegram bot tokens, and user credentials reside exclusively in `/opt/fleet/secrets.env` (mode `0600`, owned by `root:root`).
-- Zero secret leakage: Credentials are never echoed in chat logs, stdout, or systemd journal logs.
-- Telegram gateway strictly validates `TELEGRAM_ALLOWED_USERS` before starting; open bots are strictly refused.
+| `fleet-pair` | CLI | Generates 6-digit zero-trust pairing PIN with rate-limiting |
+| `fleet-report` | CLI / `/report` | Dispatches daily operations, privacy status, and MCP tools digest |
+| `fleet-firewall` | CLI / Web UI | Configures per-agent egress mode (`full`, `restricted`, `isolated`) |
+| `fleet-factory` | CLI / Web UI | Synthesizes custom `SOUL.md` and spawns agent ($0.50 daily default) |
+| `venice-resolve-model` | CLI / `/privacy` | Queries active Venice models and E2EE confidential tiers |
+| `fleet-self-improve` | CLI / Timer | Analyzes weekly feedback, uses $1 key, authors code fixes, and submits PR |
+| `fleet-rollback` | CLI | Reverts latest changes and restores verified stable commit in 5 seconds |
+| `fleet-backup` | CLI / Timer | Truncates SQLite WAL and captures atomic hot snapshot (500MB cap) |
+| `fleet-restore` | CLI | Restores fleet state and agent databases from backup vault |
+| `fleet-audit` | CLI / `/audit` | Hardware resource audit and swarm sizing capacity advisor |
+| `publish-gh` | CLI | Pushes repository to GitHub with pre-flight zero-leak credential scan |
 
 ---
 

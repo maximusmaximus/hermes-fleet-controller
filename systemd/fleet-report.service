@@ -1,0 +1,10 @@
+[Unit]
+Description=Hermes Fleet Daily Report Dispatch Service
+After=network-online.target hermes-fleet-controller.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/fleet/bin/fleet-report.py --send
+User=root
+StandardOutput=journal
+StandardError=journal

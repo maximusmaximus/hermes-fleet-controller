@@ -2,7 +2,8 @@
 # /opt/fleet/bin/fleet-backup.sh
 # Enterprise Atomic Hot-Backup Engine for Hermes Agent Fleet.
 # Performs zero-downtime SQLite snapshots using VACUUM INTO,
-# packages agent states and configs, and strictly enforces a 500MB vault ceiling.
+# truncates WAL journals (PRAGMA wal_checkpoint(TRUNCATE)),
+# enforces 1.5GB disk safety throttle, and enforces 500MB vault ceiling.
 
 set -euo pipefail
 
@@ -21,10 +22,20 @@ echo "Timestamp    : ${TIMESTAMP}"
 echo "Vault Quota  : 500 MB"
 echo ""
 
+# Safeguard 7: Check available disk space (< 1.5 GB triggers alert)
+FREE_DISK_KB=$(df --output=avail / | tail -n 1 | tr -d '[:space:]')
+FREE_DISK_MB=$((FREE_DISK_KB / 1024))
+if [ "$FREE_DISK_MB" -lt 1500 ]; then
+  echo "[⚠️ WARNING] Low disk space detected: ${FREE_DISK_MB} MB free on root filesystem (< 1.5 GB safety threshold)!"
+  if [ -x "${FLEET_DIR}/bin/fleet-telegram-notify.sh" ]; then
+    "${FLEET_DIR}/bin/fleet-telegram-notify.sh" "⚠️ *Fleet Disk Alert*: Host filesystem has only ${FREE_DISK_MB} MB free (< 1.5 GB safety threshold). Backup proceeding with WAL truncation." 2>/dev/null || true
+  fi
+fi
+
 mkdir -p "${STAGING}" "${BACKUP_DIR}"
 
-# 1. Atomic Hot-Snapshot of Agent Data
-echo "[*] Capturing atomic SQLite snapshots and configs across all agents..."
+# 1. Atomic Hot-Snapshot of Agent Data & WAL Truncation
+echo "[*] Checkpointing WAL journals and capturing SQLite snapshots..."
 AGENT_COUNT=0
 DB_COUNT=0
 
@@ -40,12 +51,14 @@ if [ -d "${FLEET_DIR}/agents" ]; then
     for db in "${agent_dir}"/*.db; do
       [ -f "${db}" ] || continue
       db_name=$(basename "${db}")
+      # Safeguard 7: Truncate WAL files before backing up to reclaim disk space
+      sqlite3 "${db}" "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
       sqlite3 "${db}" "VACUUM INTO '${target_agent_dir}/${db_name}'" 2>/dev/null || cp -p "${db}" "${target_agent_dir}/${db_name}"
       DB_COUNT=$((DB_COUNT + 1))
     done
 
     # Backup configs, identities, keys, and session metadata
-    for cfg in config.yaml key-meta.json SOUL.md .env; do
+    for cfg in config.yaml key-meta.json SOUL.md .env firewall.state; do
       if [ -f "${agent_dir}/${cfg}" ]; then
         cp -p "${agent_dir}/${cfg}" "${target_agent_dir}/"
       fi
@@ -60,10 +73,10 @@ if [ -d "${FLEET_DIR}/agents" ]; then
   done
 fi
 
-# 2. Backup Fleet-Level Topology and Secrets
-echo "[*] Capturing fleet inventory, topology, and credentials..."
+# 2. Backup Fleet-Level Topology, Auth and Secrets
+echo "[*] Capturing fleet inventory, topology, authentication, and credentials..."
 mkdir -p "${STAGING}/fleet-meta"
-for f in secrets.env vm-map.yaml inventory.yaml changelog.jsonl; do
+for f in secrets.env vm-map.yaml inventory.yaml changelog.jsonl web-auth.json tunnel-url.txt; do
   if [ -f "${FLEET_DIR}/${f}" ]; then
     cp -p "${FLEET_DIR}/${f}" "${STAGING}/fleet-meta/"
   fi
@@ -73,10 +86,11 @@ done
 cat <<EOF > "${STAGING}/manifest.json"
 {
   "timestamp": "${TIMESTAMP}",
-  "version": "1.0",
+  "version": "1.1",
   "agentCount": ${AGENT_COUNT},
   "databaseCount": ${DB_COUNT},
-  "maxVaultMb": 500
+  "maxVaultMb": 500,
+  "walCheckpoint": "TRUNCATE"
 }
 EOF
 

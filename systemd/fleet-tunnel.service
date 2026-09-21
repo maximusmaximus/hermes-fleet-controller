@@ -1,0 +1,18 @@
+[Unit]
+Description=Hermes Fleet Controller Cloudflare Tunnel
+After=network-online.target fleet-dashboard.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/fleet/bin/fleet-tunnel.sh
+WorkingDirectory=/opt/fleet
+EnvironmentFile=-/opt/fleet/secrets.env
+Restart=always
+RestartSec=10
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

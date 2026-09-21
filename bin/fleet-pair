@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# /opt/fleet/bin/fleet-pair
+exec /usr/bin/python3 /opt/fleet/bin/fleet-pair.py "$@"

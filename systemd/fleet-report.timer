@@ -1,0 +1,9 @@
+[Unit]
+Description=Hermes Fleet Daily Report Timer (09:00 Daily)
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
