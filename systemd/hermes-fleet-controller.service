@@ -19,6 +19,7 @@ ExecStart=/usr/bin/podman run --name hermes-fleet-controller \
   -v /opt/fleet/vm-map.yaml:/opt/fleet/vm-map.yaml:ro,Z \
   -v /opt/fleet/inventory.yaml:/opt/fleet/inventory.yaml:Z \
   -v /opt/fleet/changelog.jsonl:/opt/fleet/changelog.jsonl:Z \
+  -v /opt/fleet/shared-workspace:/opt/fleet/shared-workspace:rw,Z \
   -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \
   -p 127.0.0.1:8642:8642 \
   docker.io/nousresearch/hermes-agent:latest hermes gateway run

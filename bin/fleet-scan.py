@@ -269,6 +269,33 @@ def generate_inventory():
     with open(INVENTORY_FILE, "w") as f:
         f.write("\n".join(lines) + "\n")
 
+    # Generate registry.json for inter-agent discovery
+    registry_file = "/opt/fleet/registry.json"
+    registry_data = {
+        "updated_at": iso_now,
+        "controller": {
+            "model": inv["controller"]["model"],
+            "gateway": inv["controller"]["gateway"],
+            "url": "http://127.0.0.1:8642"
+        },
+        "agents": {
+            a["name"]: {
+                "role": a["quality"],
+                "model": a["model"],
+                "state": a["state"],
+                "port": 8642 if a["name"] == "fleet-controller" else (8643 if a["name"] == "ha-agent" else (8644 if a["name"] == "trollbox" else None)),
+                "daily_limit_usd": a.get("daily_usd_limit"),
+                "endpoint": f"http://127.0.0.1:{8642 if a['name'] == 'fleet-controller' else (8643 if a['name'] == 'ha-agent' else 8644)}"
+            } for a in inv["agents"]
+        },
+        "shared_workspace": "/opt/fleet/shared-workspace"
+    }
+    try:
+        with open(registry_file, "w") as f:
+            json.dump(registry_data, f, indent=2)
+    except Exception:
+        pass
+
     return inv, venice_health
 
 def print_status_report():
@@ -323,6 +350,12 @@ def print_status_report():
     return final_text
 
 def main():
+    if "--audit" in sys.argv:
+        audit_script = "/opt/fleet/bin/fleet-audit.sh"
+        if os.path.exists(audit_script):
+            subprocess.run([audit_script])
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] in ("--status", "/status", "status"):
         print_status_report()
     else:

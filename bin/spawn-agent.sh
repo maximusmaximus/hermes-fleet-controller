@@ -192,7 +192,8 @@ ExecStart=/usr/bin/podman run --name hermes-${NAME} \\
   -e HERMES_AGENT_NAME=${NAME} \\
   -v ${AGENT_DIR}:/opt/data:Z \\
   -v /opt/fleet/skills:/opt/fleet/skills:ro,Z \\
-  -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \
+  -v /opt/fleet/shared-workspace:/opt/fleet/shared-workspace:rw,Z \\
+  -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \\
   -p 127.0.0.1:${PORT}:8642 \\
   docker.io/nousresearch/hermes-agent:latest hermes gateway run
 ExecStop=/usr/bin/podman stop -t 10 hermes-${NAME}

@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 # /opt/fleet/bin/status
-exec /usr/bin/python3 /opt/fleet/bin/fleet-scan.py --status
+if [ $# -eq 0 ]; then
+  exec /usr/bin/python3 /opt/fleet/bin/fleet-scan.py --status
+else
+  exec /usr/bin/python3 /opt/fleet/bin/fleet-scan.py "$@"
+fi

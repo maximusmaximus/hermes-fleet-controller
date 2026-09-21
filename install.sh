@@ -6,20 +6,28 @@ echo "============================================================"
 echo "    🚀 Installing Hermes Fleet Controller on Guest VM"
 echo "============================================================"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Run Pre-flight System Resource Audit & Swarm Sizing Validation
+echo "[*] Running pre-flight system resource audit & swarm capacity check..."
+"${SCRIPT_DIR}/bin/fleet-audit.sh" --tune || true
+
 FLEET_DIR="/opt/fleet"
 
-mkdir -p "${FLEET_DIR}"/{bin,skills,souls,config,agents/fleet-controller,systemd,quadlets,ssh}
+mkdir -p "${FLEET_DIR}"/{bin,skills,souls,config,agents/fleet-controller,systemd,quadlets,ssh,backups,shared-workspace}
 chmod 755 "${FLEET_DIR}"
 chmod 700 "${FLEET_DIR}/ssh"
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+chmod 700 "${FLEET_DIR}/backups"
+chmod 777 "${FLEET_DIR}/shared-workspace"
+chown -R 10000:10000 "${FLEET_DIR}/shared-workspace" 2>/dev/null || true
 
 # Copy operational scripts
 cp -r "${SCRIPT_DIR}/bin/"* "${FLEET_DIR}/bin/"
 chmod +x "${FLEET_DIR}/bin/"*
 
-# Symlink status, publish-gh, fleet-backup, and fleet-restore commands to PATH
+# Symlink operational tools to PATH
 ln -sf "${FLEET_DIR}/bin/status" /usr/local/bin/status
+ln -sf "${FLEET_DIR}/bin/fleet-audit.sh" /usr/local/bin/fleet-audit
 ln -sf "${FLEET_DIR}/bin/fleet-publish-gh.sh" /usr/local/bin/publish-gh
 ln -sf "${FLEET_DIR}/bin/fleet-backup.sh" /usr/local/bin/fleet-backup
 ln -sf "${FLEET_DIR}/bin/fleet-restore.sh" /usr/local/bin/fleet-restore
@@ -52,7 +60,8 @@ systemctl enable --now fleet-update.timer
 
 echo ""
 echo "[✓] Hermes Fleet Controller successfully deployed!"
-echo "    • Status command: status"
+echo "    • Status command: status (or status --audit)"
+echo "    • System audit: fleet-audit (Resource validator & swarm sizing)"
 echo "    • GitHub publish: publish-gh"
 echo "    • Hot backup: fleet-backup (Vault ceiling: 500 MB)"
 echo "    • Disaster recovery: fleet-restore (--list / --latest)"

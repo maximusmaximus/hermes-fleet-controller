@@ -26,6 +26,7 @@ Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agen
 ```text
 hermes-fleet-controller/
 ├── bin/                              # Operational management scripts
+│   ├── fleet-audit.sh                # Pre-flight system resource audit & swarm capacity sizing
 │   ├── fleet-backup.sh               # Atomic SQLite VACUUM INTO hot-backup engine (500MB cap)
 │   ├── fleet-restore.sh              # One-click disaster recovery & snapshot restoration
 │   ├── fleet-publish-gh.sh           # Automated GitHub publisher with zero-leak verification
@@ -140,6 +141,38 @@ To ensure high stability and avoid resource starvation on resource-constrained n
 - **Backup Vault Quota**: Total backup storage in `/opt/fleet/backups` is hard-capped at **500 MB** with automatic oldest-first snapshot rotation.
 - **Journal Log Ceiling**: Systemd journal log storage is capped at **500 MB** (`SystemMaxUse=500M`).
 
+## Pre-Flight System Audit & Swarm Sizing (`fleet-audit`)
+
+The integrated system audit tool validates node hardware, storage hygiene, and egress network reachability, providing calculated sizing recommendations for your swarm.
+
+### Usage
+
+```bash
+# Run interactive system audit and swarm sizing report
+fleet-audit
+
+# Run system audit and automatically apply recommended storage optimizations
+fleet-audit --tune
+
+# Output audit metrics as JSON for programmatic agent consumption
+fleet-audit --json
+```
+
+### Audited Metrics & Swarm Sizing Logic
+- **Compute & Memory**: Evaluates vCPUs, current load, and available RAM. Sizing computes `floor((available_ram - 1.5GB) / 500MB)`.
+- **Disk Storage**: Evaluates root partition capacity and free space. Warns if usage &ge; 80% and blocks/flags critical storage exhaustion at &ge; 90%.
+- **Network Reachability**: Verifies TCP egress to Venice AI (`api.venice.ai:443`), Telegram (`api.telegram.org:443`), and GitHub (`github.com:443`).
+- **Hygiene Auto-Tuning (`--tune`)**: Establishes 500MB systemd journal ceiling, adjusts Snap retention to 2 revisions, and pre-allocates shared fleet workspaces.
+
+---
+
+## Inter-Agent Collaboration & Shared Stack Resources
+
+All fleet agents share coordinated communication and storage layers:
+- **Shared Service Registry (`/opt/fleet/registry.json`)**: Live discovery registry populated on every scan detailing active agent roles, models, ports, endpoints, and daily USD inference limits.
+- **Shared Agent Workspace (`/opt/fleet/shared-workspace`)**: High-speed bridge mounted with read-write permissions into every agent container (`/opt/fleet/shared-workspace:rw,Z`), enabling agents to pass files, code reviews, and structured task deliverables directly to sibling agents.
+- **Global Skill Library (`/opt/fleet/skills`)**: Mounted read-only into all containers so custom skills are immediately discoverable across the swarm.
+
 ---
 
 ## CLI & Telegram Commands
@@ -147,6 +180,7 @@ To ensure high stability and avoid resource starvation on resource-constrained n
 | Command | Environment | Description |
 | :--- | :--- | :--- |
 | `status` or `/status` | CLI / Telegram | Generates real-time report of VM states, agent units, Venice latency, and versions |
+| `fleet-audit` | CLI | Pre-flight system resource audit, storage hygiene check, and swarm capacity advisor |
 | `fleet-backup` | CLI / Timer | Captures atomic zero-lock SQLite snapshot across all agents (500MB vault ceiling) |
 | `fleet-restore` | CLI | One-click disaster recovery restoring fleet state and databases |
 | `publish-gh` | CLI | Publishes sanitized fleet repository, souls, and skills to GitHub with zero-leak verification |
