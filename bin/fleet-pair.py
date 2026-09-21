@@ -153,11 +153,41 @@ def main():
         print("valid" if valid else "invalid")
         sys.exit(0 if valid else 1)
 
-    # Default CLI action: Generate & Print new PIN
+    # Generate new PIN
     pin, expires_at = generate_pin()
     now = int(time.time())
     ttl = expires_at - now
     tunnel_url = get_tunnel_url()
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("--json", "-j"):
+        print(json.dumps({
+            "pin": pin,
+            "expires_at": expires_at,
+            "ttl_seconds": ttl,
+            "url": tunnel_url
+        }, indent=2))
+        sys.exit(0)
+
+    tg_text = (
+        f"🔐 *HERMES FLEET DASHBOARD LOGIN*\n\n"
+        f"🌐 *Direct Access Link*:\n{tunnel_url}\n\n"
+        f"🔑 *One-Time Login PIN*: `{pin}`\n"
+        f"⏳ *Valid For*: {ttl // 60} minutes ({ttl}s)\n"
+        f"🛡️ *Security*: Rate-limited (5 failed attempts = 15m lockout)\n\n"
+        f"👉 Tap the link above on your phone or laptop and enter PIN `{pin}` to authenticate."
+    )
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("--tg", "--telegram"):
+        print(tg_text)
+        sys.exit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("--send-tg", "-s"):
+        notify_sh = os.path.join(os.path.dirname(AUTH_FILE), "bin", "fleet-telegram-notify.sh")
+        if os.path.exists(notify_sh):
+            import subprocess
+            subprocess.call([notify_sh, tg_text])
+        print(tg_text)
+        sys.exit(0)
 
     print("=" * 60)
     print("       🔐 HERMES FLEET CONTROLLER - DEVICE PAIRING")

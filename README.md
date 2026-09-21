@@ -196,13 +196,11 @@ fleet-firewall ha-agent status
 
 ## Command Reference
 
-| Command | Interface | Description |
-| :--- | :--- | :--- |
-| `fleet-pair` | CLI | Generates 6-digit zero-trust pairing PIN with rate-limiting |
-| `fleet-report` | CLI / `/report` | Dispatches daily operations, privacy status, and MCP tools digest |
+| `fleet-pair` or `/pair` or `/login` | CLI / Telegram | Generates 6-digit zero-trust pairing PIN and dashboard link |
+| `fleet-report` or `/report` | CLI / Telegram | Dispatches daily operations, privacy status, and MCP tools digest |
 | `fleet-firewall` | CLI / Web UI | Configures per-agent egress mode (`full`, `restricted`, `isolated`) |
 | `fleet-factory` | CLI / Web UI | Synthesizes custom `SOUL.md` and spawns agent ($0.50 daily default) |
-| `venice-resolve-model` | CLI / `/privacy` | Queries active Venice models and E2EE confidential tiers |
+| `venice-resolve-model` or `/privacy` | CLI / Telegram | Queries active Venice models and E2EE confidential tiers |
 | `fleet-self-improve` | CLI / Timer | Analyzes weekly feedback, uses $1 key, authors code fixes, and submits PR |
 | `fleet-rollback` | CLI | Reverts latest changes and restores verified stable commit in 5 seconds |
 | `fleet-backup` | CLI / Timer | Truncates SQLite WAL and captures atomic hot snapshot (500MB cap) |

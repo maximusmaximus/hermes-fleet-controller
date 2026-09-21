@@ -210,9 +210,19 @@ def build_report_text(metrics, agents, mcp_catalog):
 
     venice_status = f"{metrics['venice_latency_ms']}ms" if metrics['venice_latency_ms'] >= 0 else "DEGRADED"
 
+    tunnel_url = "Offline"
+    t_file = os.path.join(FLEET_DIR, "tunnel-url.txt")
+    if os.path.exists(t_file):
+        try:
+            with open(t_file) as f:
+                tunnel_url = f.read().strip()
+        except Exception:
+            pass
+
     lines = [
         f"📋 *HERMES SWARM DAILY OPERATIONS REPORT*",
         f"⏰ `{date_str}`\n",
+        f"🌐 *Web Dashboard Link*:\n{tunnel_url}\n",
         f"🛰️ *Fleet Overview*",
         f"• Active Containers: `{running_cnt}/{total_cnt}` running",
         f"• CPU Load: `{metrics['load']}`",
@@ -242,6 +252,7 @@ def build_report_text(metrics, agents, mcp_catalog):
             lines.append(f"  • `{tool}`")
 
     lines.append("\n📱 *Telegram Bot Command Suite*")
+    lines.append("• `/pair` or `/login` - Generate 6-digit PIN & link to access Web Dashboard")
     lines.append("• `/report` - Dispatch this operations & MCP digest")
     lines.append("• `/status` - Real-time fleet health & container check")
     lines.append("• `/privacy` - View Venice E2EE confidential models")

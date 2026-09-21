@@ -310,6 +310,18 @@ def print_status_report():
     report.append(f"• Hermes Version: {inv['controller']['hermes_version']}")
     report.append(f"• Controller Model: {inv['controller']['model']} (Venice)")
     report.append(f"• Gateway: {inv['controller']['gateway']} (@{inv['controller']['telegram_bot']})")
+
+    # Cloudflare Web Dashboard
+    tunnel_url = "Offline"
+    t_file = "/opt/fleet/tunnel-url.txt"
+    if os.path.exists(t_file):
+        try:
+            with open(t_file) as f:
+                tunnel_url = f.read().strip()
+        except Exception:
+            pass
+    report.append(f"• 🌐 Web Dashboard: {tunnel_url}")
+    report.append("• 🔐 Login / Pair Device: /pair (Generates 6-digit access PIN)")
     
     # Venice reachability
     if vhealth.get("status") == "ok":
