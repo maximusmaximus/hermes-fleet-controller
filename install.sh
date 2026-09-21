@@ -18,9 +18,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cp -r "${SCRIPT_DIR}/bin/"* "${FLEET_DIR}/bin/"
 chmod +x "${FLEET_DIR}/bin/"*
 
-# Symlink status and publish-gh commands to PATH
+# Symlink status, publish-gh, fleet-backup, and fleet-restore commands to PATH
 ln -sf "${FLEET_DIR}/bin/status" /usr/local/bin/status
 ln -sf "${FLEET_DIR}/bin/fleet-publish-gh.sh" /usr/local/bin/publish-gh
+ln -sf "${FLEET_DIR}/bin/fleet-backup.sh" /usr/local/bin/fleet-backup
+ln -sf "${FLEET_DIR}/bin/fleet-restore.sh" /usr/local/bin/fleet-restore
 
 # Copy skills and souls
 cp -r "${SCRIPT_DIR}/skills/"* "${FLEET_DIR}/skills/"
@@ -45,12 +47,16 @@ systemctl daemon-reload
 systemctl enable --now hermes-fleet-controller.service
 systemctl enable --now fleet-daily.timer
 systemctl enable --now fleet-doc-sync.timer
+systemctl enable --now fleet-backup.timer
 systemctl enable --now fleet-update.timer
 
 echo ""
 echo "[✓] Hermes Fleet Controller successfully deployed!"
 echo "    • Status command: status"
 echo "    • GitHub publish: publish-gh"
+echo "    • Hot backup: fleet-backup (Vault ceiling: 500 MB)"
+echo "    • Disaster recovery: fleet-restore (--list / --latest)"
+echo "    • Daily backup timer: fleet-backup.timer (02:00 local)"
 echo "    • Daily digest timer: fleet-daily.timer (09:00 local)"
 echo "    • Doc sync timer: fleet-doc-sync.timer (08:00 PST)"
 echo "    • Weekly update timer: fleet-update.timer (Sun 03:30 local)"

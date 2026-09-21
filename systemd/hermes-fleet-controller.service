@@ -10,6 +10,7 @@ RestartSec=5
 TimeoutStartSec=180
 ExecStartPre=-/usr/bin/podman rm -f hermes-fleet-controller
 ExecStart=/usr/bin/podman run --name hermes-fleet-controller \
+  --memory 500m \
   --env-file /opt/fleet/secrets.env \
   -e HERMES_AGENT_NAME=fleet-controller \
   -v /opt/fleet/agents/fleet-controller:/opt/data:Z \
@@ -18,6 +19,7 @@ ExecStart=/usr/bin/podman run --name hermes-fleet-controller \
   -v /opt/fleet/vm-map.yaml:/opt/fleet/vm-map.yaml:ro,Z \
   -v /opt/fleet/inventory.yaml:/opt/fleet/inventory.yaml:Z \
   -v /opt/fleet/changelog.jsonl:/opt/fleet/changelog.jsonl:Z \
+  -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \
   -p 127.0.0.1:8642:8642 \
   docker.io/nousresearch/hermes-agent:latest hermes gateway run
 ExecStop=/usr/bin/podman stop -t 10 hermes-fleet-controller

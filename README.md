@@ -26,6 +26,8 @@ Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agen
 ```text
 hermes-fleet-controller/
 ├── bin/                              # Operational management scripts
+│   ├── fleet-backup.sh               # Atomic SQLite VACUUM INTO hot-backup engine (500MB cap)
+│   ├── fleet-restore.sh              # One-click disaster recovery & snapshot restoration
 │   ├── fleet-publish-gh.sh           # Automated GitHub publisher with zero-leak verification
 │   ├── fleet-attach-keys.sh          # Credential setup & validation wizard
 │   ├── venice-manage-keys.py         # Sub-key generator & daily inference budget allocator
@@ -112,11 +114,41 @@ Before any code or docs are pushed to GitHub, `publish-gh`:
 
 ---
 
+## Atomic Hot-Backup & Disaster Recovery (`fleet-backup` / `fleet-restore`)
+
+The fleet includes an automated zero-downtime backup engine utilizing SQLite's atomic `VACUUM INTO` API to guarantee database consistency without locking active agent sessions.
+
+### Usage
+
+```bash
+# Capture immediate atomic hot-snapshot
+fleet-backup
+
+# List all available snapshots in the vault
+fleet-restore --list
+
+# Restore the newest available snapshot
+fleet-restore --latest
+
+# Restore a specific snapshot archive
+fleet-restore --file /opt/fleet/backups/fleet-backup-20260920_120000.tar.gz
+```
+
+### 500 MB Fleet Resource Governance
+To ensure high stability and avoid resource starvation on resource-constrained nodes:
+- **Agent Memory Ceiling**: Every agent container is capped at **500 MB RAM** (`--memory 500m`).
+- **Backup Vault Quota**: Total backup storage in `/opt/fleet/backups` is hard-capped at **500 MB** with automatic oldest-first snapshot rotation.
+- **Journal Log Ceiling**: Systemd journal log storage is capped at **500 MB** (`SystemMaxUse=500M`).
+
+---
+
 ## CLI & Telegram Commands
 
 | Command | Environment | Description |
 | :--- | :--- | :--- |
 | `status` or `/status` | CLI / Telegram | Generates real-time report of VM states, agent units, Venice latency, and versions |
+| `fleet-backup` | CLI / Timer | Captures atomic zero-lock SQLite snapshot across all agents (500MB vault ceiling) |
+| `fleet-restore` | CLI | One-click disaster recovery restoring fleet state and databases |
 | `publish-gh` | CLI | Publishes sanitized fleet repository, souls, and skills to GitHub with zero-leak verification |
 | `/attach-keys` | CLI | Interactive wizard to attach/rotate Venice and Telegram credentials |
 | `/allocate-daily` | CLI | Set or adjust daily inference spending limit for a specific agent |

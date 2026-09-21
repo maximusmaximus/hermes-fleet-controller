@@ -187,6 +187,7 @@ RestartSec=5
 TimeoutStartSec=180
 ExecStartPre=-/usr/bin/podman rm -f hermes-${NAME}
 ExecStart=/usr/bin/podman run --name hermes-${NAME} \\
+  --memory 500m \\
   --env-file ${AGENT_DIR}/.env \\
   -e HERMES_AGENT_NAME=${NAME} \\
   -v ${AGENT_DIR}:/opt/data:Z \\

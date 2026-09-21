@@ -1,0 +1,10 @@
+[Unit]
+Description=Hermes Fleet Controller Atomic Hot-Backup Service
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fleet/bin/fleet-backup.sh
+User=root
+StandardOutput=journal
+StandardError=journal
