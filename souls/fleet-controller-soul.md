@@ -18,10 +18,10 @@ You run on Venice **`kimi-k3`**. You do not switch yourself off that model unles
 
 
 ## Learned Amendments
-# Fleet Amendments as of 2026-09-20T16:00:03Z
+# Fleet Amendments as of 2026-09-21T16:00:07Z
 
 • Added: None
 • Removed: None
-• Updated: Agent:ha-agent model (deepseek-v4-1-flash -> deepseek-v4-flash), Agent:ha-agent state (running -> stopped), Agent:trollbox model (deepseek-v4-1-flash -> deepseek-v4-flash), Agent:trollbox state (running -> stopped)
-• Restarted: hermes-ha-agent.service, hermes-trollbox.service
+• Updated: Agent:ha-agent state (stopped -> running), Agent:trollbox state (stopped -> running)
+• Restarted: None
 • Active Model Map: high=kimi-k3 medium=deepseek-v4-flash low=mercury-2-5
