@@ -1,0 +1,10 @@
+[Unit]
+Description=Home Assistant Core Log Watcher and AI Diagnostic Dispatcher
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/fleet/bin/fleet-ha-log-watcher.py
+StandardOutput=journal
+StandardError=journal
