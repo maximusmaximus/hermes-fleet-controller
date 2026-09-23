@@ -14,20 +14,23 @@ import time
 
 HA_URL = "http://192.168.50.106:8123"
 SECRETS_FILES = [
-    "/opt/fleet/agents/ha-agent/.env",
-    "/opt/fleet/secrets.env"
+    "/opt/fleet/secrets.env",
+    "/opt/fleet/agents/ha-agent/.env"
 ]
 
 def load_env():
     env = {}
     for sf in SECRETS_FILES:
         if os.path.exists(sf):
-            with open(sf) as f:
-                for line in f:
-                    line = line.strip()
-                    if "=" in line and not line.startswith("#"):
-                        k, v = line.split("=", 1)
-                        env[k.strip()] = v.strip("'\" ")
+            try:
+                with open(sf) as f:
+                    for line in f:
+                        line = line.strip()
+                        if "=" in line and not line.startswith("#"):
+                            k, v = line.split("=", 1)
+                            env[k.strip()] = v.strip("'\" ")
+            except Exception:
+                pass
     return env
 
 def get_ha_headers(env):
@@ -123,7 +126,7 @@ def get_status():
 def diagnose_with_venice(errors):
     env = load_env()
     key = env.get("VENICE_API_KEY", "")
-    model = env.get("CONTROLLER_MODEL") or "deepseek-v4-flash"
+    model = "deepseek-v4-flash"
     
     prompt = (
         "You are ha-agent, autonomous Home Assistant Site Reliability Engineer.\n"
