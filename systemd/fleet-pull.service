@@ -1,0 +1,11 @@
+[Unit]
+Description=Hermes Fleet Controller Auto-Pull & Sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/fleet/bin/fleet-pull.sh
+StandardOutput=journal
+StandardError=journal

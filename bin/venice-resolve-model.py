@@ -176,11 +176,56 @@ def get_cached_or_fresh():
     }
 
 
+TUNNEL_FILE = "/opt/fleet/tunnel-url.txt"
+
+
+def get_tunnel_url():
+    if os.path.exists(TUNNEL_FILE):
+        try:
+            with open(TUNNEL_FILE) as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    return "https://worship-him-knight-jul.trycloudflare.com"
+
+
+def format_privacy_summary(data):
+    tunnel_url = get_tunnel_url()
+    catalog = data.get("privacy_catalog", {})
+    e2ee_list = catalog.get("e2ee", [])
+    private_list = catalog.get("private", [])
+    tiers = data.get("tiers", {})
+
+    lines = [
+        "🔒 *VENICE HARDWARE-ENCLAVE & PRIVACY MODELS*",
+        "",
+        f"🌐 *Live Dashboard*: {tunnel_url}",
+        "",
+        "🛡️ *Confidential Hardware Enclaves (E2EE / TEE)*:",
+    ]
+    for m in e2ee_list[:4]:
+        mid = m.get("id")
+        p = m.get("pricing", {}).get("input_per_million", 0)
+        lines.append(f"• `{mid}` (\\${p:.2f}/M) — AMD SEV-SNP Enclave")
+
+    lines.extend([
+        "",
+        "🔒 *Zero Data Retention (ZDR Private)*:",
+        f"• `{tiers.get('controller', 'kimi-k3')}` — Fleet Controller Engine",
+        f"• `{tiers.get('medium', 'deepseek-v4-flash')}` — Child Agent Standard Tier",
+        f"• `{tiers.get('low', 'mercury-2-5')}` — Low-Cost Swarm Inference",
+        "",
+        f"✨ *Catalog Summary*: {len(e2ee_list)} E2EE Enclaves, {len(private_list)} ZDR Private models.",
+        "👉 Switch any agent to encrypted mode live in the Web Dashboard or via `/pair`."
+    ])
+    return "\n".join(lines)
+
+
 def main():
     valid_args = (
         "high", "medium", "low", "controller",
         "high-e2ee", "medium-e2ee", "low-e2ee",
-        "all", "refresh", "privacy-models"
+        "all", "refresh", "privacy-models", "privacy-summary"
     )
     if len(sys.argv) < 2 or sys.argv[1] not in valid_args:
         print(f"Usage: venice-resolve-model.py [{'|'.join(valid_args)}]", file=sys.stderr)
@@ -202,6 +247,10 @@ def main():
         sys.exit(0)
 
     data = get_cached_or_fresh()
+
+    if target_tier == "privacy-summary":
+        print(format_privacy_summary(data))
+        sys.exit(0)
 
     if target_tier == "privacy-models":
         catalog = data.get("privacy_catalog", {})

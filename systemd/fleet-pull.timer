@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic GitHub Pull & Sync for Hermes Fleet Controller
+After=network-online.target
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

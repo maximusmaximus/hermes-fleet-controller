@@ -15,3 +15,33 @@ gateway:
 platforms:
   telegram:
     allowed_chats: ["${TELEGRAM_ALLOWED_USERS}"]
+
+quick_commands:
+  pair:
+    type: exec
+    command: python3 /opt/fleet/bin/fleet-pair.py --tg
+  login:
+    type: exec
+    command: python3 /opt/fleet/bin/fleet-pair.py --tg
+  report:
+    type: exec
+    command: python3 /opt/fleet/bin/fleet-report.py --stdout
+  status:
+    type: exec
+    command: python3 /opt/fleet/bin/fleet-scan.py --status
+  fleet:
+    type: exec
+    command: python3 /opt/fleet/bin/fleet-scan.py --status
+  privacy:
+    type: exec
+    command: python3 /opt/fleet/bin/venice-resolve-model.py privacy-summary
+  backup:
+    type: exec
+    command: /opt/fleet/bin/fleet-backup.sh
+  pull:
+    type: exec
+    command: /opt/fleet/bin/fleet-pull.sh
+
+skills:
+  external_dirs:
+    - /opt/fleet/skills
