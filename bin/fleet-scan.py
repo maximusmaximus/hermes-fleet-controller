@@ -140,6 +140,8 @@ def scan_agents():
         "last_health": "ok" if ctrl_active else "failed"
     })
 
+    seen_agents = {"fleet-controller"}
+
     # Child agents in /opt/fleet/agents
     if os.path.exists(AGENTS_DIR):
         for item in sorted(os.listdir(AGENTS_DIR)):
@@ -169,6 +171,18 @@ def scan_agents():
                             model_name = sline.split(":", 1)[1].strip().strip('"\'')
                             break
 
+                # If unit is inactive, check if container is running directly in podman
+                if not unit_active:
+                    try:
+                        c_state = subprocess.check_output(
+                            ["podman", "inspect", "-f", "{{.State.Status}}", f"hermes-{item}"],
+                            stderr=subprocess.DEVNULL
+                        ).decode("utf-8").strip()
+                        if c_state == "running":
+                            unit_active = True
+                    except Exception:
+                        pass
+
                 agents.append({
                     "name": item,
                     "parent": "fleet-controller",
@@ -180,6 +194,44 @@ def scan_agents():
                     "specialized_skill": meta.get("skill", "general-agent"),
                     "last_health": "ok" if unit_active else "failed"
                 })
+                seen_agents.add(item)
+
+    # Auto-discover any running Podman containers not yet in /opt/fleet/agents
+    try:
+        raw_ps = subprocess.check_output(
+            ["podman", "ps", "-a", "--format", "json"],
+            stderr=subprocess.DEVNULL
+        ).decode("utf-8")
+        containers = json.loads(raw_ps) if raw_ps.strip() else []
+        for c in containers:
+            names = c.get("Names", [])
+            if not names:
+                continue
+            cname = names[0].lstrip("/")
+            if not cname.startswith("hermes-") or cname in ("hermes-fleet-controller", "fleet-controller"):
+                continue
+            clean_name = cname[7:]
+            if clean_name in seen_agents:
+                continue
+
+            status = c.get("State", "stopped")
+            if not status:
+                status = "running" if "Up" in c.get("Status", "") else "stopped"
+
+            agents.append({
+                "name": clean_name,
+                "parent": "fleet-controller",
+                "unit": f"hermes-{clean_name}.service",
+                "state": status,
+                "model": "deepseek-v4-flash",
+                "quality": "medium",
+                "daily_usd_limit": 0.5,
+                "specialized_skill": "auto-connected-agent",
+                "last_health": "ok" if status == "running" else "failed"
+            })
+            seen_agents.add(clean_name)
+    except Exception:
+        pass
 
     return agents
 

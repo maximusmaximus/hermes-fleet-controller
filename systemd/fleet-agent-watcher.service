@@ -1,0 +1,16 @@
+[Unit]
+Description=Hermes Fleet Agent Auto-Discovery & Manager Connection Watcher
+After=network-online.target hermes-fleet-controller.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Restart=always
+RestartSec=5
+ExecStart=/usr/bin/python3 /opt/fleet/bin/fleet-agent-watcher.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

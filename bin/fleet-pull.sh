@@ -95,7 +95,14 @@ if [ -d "$REPO_DIR/patches" ]; then
   sudo cp -r "$REPO_DIR"/patches/* "$OPT_DIR/patches"/
 fi
 
-# 7. Check if dashboard or controller services need restart
+# 7. Synchronize systemd unit files if present
+if [ -d "$REPO_DIR/systemd" ]; then
+  echo "[*] Synchronizing systemd units..."
+  sudo cp -u "$REPO_DIR"/systemd/* /etc/systemd/system/ 2>/dev/null || sudo cp "$REPO_DIR"/systemd/* /etc/systemd/system/
+  sudo systemctl daemon-reload || true
+fi
+
+# 8. Check if services need restart
 if git diff --name-only "$LOCAL_COMMIT" "$NEW_COMMIT" | grep -q "bin/fleet-dashboard.py"; then
   echo "[*] Restarting fleet-dashboard.service due to code update..."
   sudo systemctl restart fleet-dashboard.service || true
@@ -106,7 +113,12 @@ if git diff --name-only "$LOCAL_COMMIT" "$NEW_COMMIT" | grep -q "patches/"; then
   sudo systemctl restart hermes-fleet-controller.service || true
 fi
 
-# 8. Refresh Telegram Bot Commands & Keyboard
+if git diff --name-only "$LOCAL_COMMIT" "$NEW_COMMIT" | grep -qE "bin/fleet-agent-watcher.py|bin/fleet-connect-agent.py|systemd/fleet-agent-watcher.service"; then
+  echo "[*] Restarting fleet-agent-watcher.service due to watcher update..."
+  sudo systemctl restart fleet-agent-watcher.service || true
+fi
+
+# 9. Refresh Telegram Bot Commands & Keyboard
 if [ -f "$BIN_DIR/fleet-tg-keyboard.py" ]; then
   echo "[*] Updating Telegram commands and keyboard..."
   sudo python3 "$BIN_DIR/fleet-tg-keyboard.py" --setup || true

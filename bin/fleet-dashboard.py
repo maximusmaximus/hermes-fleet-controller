@@ -157,6 +157,16 @@ def list_swarm_agents():
             except Exception:
                 pass
 
+        # Ensure agent directory exists for newly discovered containers
+        agent_path = os.path.join(agents_dir, name)
+        if not os.path.exists(agent_path):
+            try:
+                os.makedirs(agent_path, exist_ok=True)
+                with open(os.path.join(agent_path, "firewall.state"), "w") as f:
+                    f.write("full\n")
+            except Exception:
+                pass
+
         # Config inspection
         cfg_file = os.path.join(agents_dir, name, "config.yaml")
         model = "unknown"
@@ -173,6 +183,22 @@ def list_swarm_agents():
                     port = cfg.get("port") or cfg.get("server", {}).get("port")
             except Exception:
                 pass
+
+        # Fallback inspection from container env if model unknown
+        if model == "unknown":
+            try:
+                env_out = subprocess.check_output(
+                    ["podman", "inspect", "-f", "{{range .Config.Env}}{{.}}\n{{end}}", f"hermes-{name}"],
+                    stderr=subprocess.DEVNULL
+                ).decode("utf-8")
+                for eline in env_out.splitlines():
+                    if eline.startswith("VENICE_MODEL=") or eline.startswith("MODEL="):
+                        model = eline.split("=", 1)[1].strip()
+                        break
+            except Exception:
+                pass
+        if model == "unknown":
+            model = "deepseek-v4-flash"
 
         is_e2ee = "e2ee" in model.lower()
 
@@ -481,8 +507,23 @@ async def ws_metrics(websocket: WebSocket):
 async def ws_logs(websocket: WebSocket, agent: str):
     await websocket.accept()
     cname = f"hermes-{agent}"
+    unit_name = f"hermes-{agent}.service"
+    
+    # Check if systemd unit exists/active, otherwise stream via podman logs
+    is_systemd = False
+    try:
+        ret = subprocess.call(["systemctl", "status", unit_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        is_systemd = (ret == 0)
+    except Exception:
+        pass
+
+    if is_systemd:
+        cmd = ["journalctl", "-u", unit_name, "-f", "-n", "40", "--no-pager"]
+    else:
+        cmd = ["podman", "logs", "-f", "--tail", "40", cname]
+
     proc = await asyncio.create_subprocess_exec(
-        "journalctl", "-u", cname, "-f", "-n", "40", "--no-pager",
+        *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT
     )
