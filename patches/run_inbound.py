@@ -1223,9 +1223,32 @@ class GatewayInboundMixin:
         self, event: "MessageEvent", source: SessionSource, _quick_key: str
     ) -> Tuple[bool, Optional[str]]:
         """Idle path: resolve + dispatch slash commands; rewriting commands fall through to the agent."""
+        msg_text = (getattr(event, "text", "") or "").strip()
+        button_map = {
+            "🔐 Pair Dashboard": "python3 /opt/fleet/bin/fleet-pair.py --tg",
+            "Pair Dashboard": "python3 /opt/fleet/bin/fleet-pair.py --tg",
+            "🔑 Dashboard Access": "python3 /opt/fleet/bin/fleet-pair.py --tg",
+            "📊 Fleet Status": "python3 /opt/fleet/bin/fleet-scan.py --status",
+            "Fleet Status": "python3 /opt/fleet/bin/fleet-scan.py --status",
+            "📋 Daily Report": "python3 /opt/fleet/bin/fleet-report.py --stdout",
+            "Daily Report": "python3 /opt/fleet/bin/fleet-report.py --stdout",
+            "🔒 Privacy Models": "python3 /opt/fleet/bin/venice-resolve-model.py privacy-summary",
+            "Privacy Models": "python3 /opt/fleet/bin/venice-resolve-model.py privacy-summary",
+            "🔌 MCP Tools": "python3 /opt/fleet/bin/fleet-report.py --stdout",
+            "MCP Tools": "python3 /opt/fleet/bin/fleet-report.py --stdout",
+            "🛡️ Hot Backup": "/opt/fleet/bin/fleet-backup.sh",
+            "Hot Backup": "/opt/fleet/bin/fleet-backup.sh",
+            "🔄 Pull Latest": "/opt/fleet/bin/fleet-pull.sh",
+            "Pull Latest": "/opt/fleet/bin/fleet-pull.sh",
+        }
+        if msg_text in button_map:
+            output = await self._hm_run_exec_quick_command(msg_text, button_map[msg_text])
+            return True, output
+
         _handled, _result, command, canonical = await self._hm_resolve_command(event, source, _quick_key)
         if not _handled:
             _handled, _result, command = await self._hm_dispatch_quick_and_plugin_commands(event, source, command)
+
         if not _handled:
             _handled, _result = await self._hm_dispatch_canonical_command(event, source, _quick_key, canonical)
         if not _handled:

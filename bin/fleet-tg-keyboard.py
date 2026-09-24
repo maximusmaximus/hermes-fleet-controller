@@ -96,34 +96,73 @@ def setup_menu_button(token):
     return res.get("ok", False)
 
 
+import time
+import importlib
+
+sys.path.insert(0, "/opt/fleet/bin")
+try:
+    fleet_pair = importlib.import_module("fleet-pair")
+except Exception:
+    fleet_pair = None
+
+
 def send_kitchen_sink_keyboard(token, chat_id):
-    """Send persistent reply keyboard with the top fleet actions."""
+    """Send persistent reply keyboard with the top fleet actions and one-click dash button."""
     tunnel_url = get_tunnel_url()
+
+    pin = None
+    key = None
+    ttl = 600
+    direct_login_url = tunnel_url
+    if fleet_pair and hasattr(fleet_pair, "generate_credentials"):
+        try:
+            pin, key, expires_at = fleet_pair.generate_credentials()
+            ttl = max(60, expires_at - int(time.time()))
+            direct_login_url = f"{tunnel_url}/?key={key}"
+        except Exception as e:
+            print(f"[-] Warning: Failed to generate credentials: {e}", file=sys.stderr)
+
     keyboard = {
         "keyboard": [
             [
                 {"text": "🔐 Pair Dashboard"},
-                {"text": "📋 Daily Report"}
+                {"text": "📊 Fleet Status"}
             ],
             [
-                {"text": "📊 Fleet Status"},
+                {"text": "📋 Daily Report"},
                 {"text": "🔒 Privacy Models"}
             ],
             [
                 {"text": "🔌 MCP Tools"},
                 {"text": "🛡️ Hot Backup"}
+            ],
+            [
+                {"text": "🔄 Pull Latest"}
             ]
         ],
         "resize_keyboard": True,
         "is_persistent": True
     }
 
-    text = (
-        "🎛️ *Hermes Fleet Controller — Operations Console*\n\n"
-        f"🌐 *Web Dashboard Link*:\n{tunnel_url}\n\n"
-        "Tap any button below to activate instant fleet operations, "
-        "or type `/` to browse slash commands (e.g. `/pair`, `/report`, `/fleet`, `/privacy`):"
-    )
+    if key:
+        text = (
+            "🎛️ *Hermes Fleet Controller — Operations Console*\n\n"
+            "🌐 *Web Dashboard*:\n"
+            f"⚡ [Tap here for One-Click Auto-Login]({direct_login_url})\n"
+            f"`{direct_login_url}`\n\n"
+            "🔑 *Telegram Access Key* (for pasting):\n"
+            f"`{key}`\n\n"
+            f"🔢 *Short PIN*: `{pin}`  •  ⏳ *Valid For*: {ttl // 60}m\n"
+            "🛡️ *Zero-Trust Gate*: The dashboard cannot be loaded without this key or PIN.\n\n"
+            "👇 Tap any button below to trigger instant fleet operations:"
+        )
+    else:
+        text = (
+            "🎛️ *Hermes Fleet Controller — Operations Console*\n\n"
+            f"🌐 *Web Dashboard Link*:\n{tunnel_url}\n\n"
+            "Tap any button below to activate instant fleet operations, "
+            "or type `/` to browse slash commands (e.g. `/pair`, `/report`, `/fleet`, `/privacy`):"
+        )
 
     payload = {
         "chat_id": chat_id,
@@ -137,7 +176,25 @@ def send_kitchen_sink_keyboard(token, chat_id):
         print(f"[✓] Persistent reply keyboard sent to chat {chat_id}.")
     else:
         print(f"[-] Failed to send keyboard to chat {chat_id}.", file=sys.stderr)
+
+    # Also send native inline button for one-click browser launch
+    if direct_login_url and direct_login_url != "Offline":
+        inline_payload = {
+            "chat_id": chat_id,
+            "text": "⚡ *One-Click Web Dashboard Access*\nTap the button below to immediately open and unlock the dashboard in your browser:",
+            "parse_mode": "Markdown",
+            "reply_markup": {
+                "inline_keyboard": [
+                    [
+                        {"text": "🚀 Open Web Dashboard", "url": direct_login_url}
+                    ]
+                ]
+            }
+        }
+        tg_request(token, "sendMessage", inline_payload)
+
     return res.get("ok", False)
+
 
 
 def remove_keyboard(token, chat_id):
