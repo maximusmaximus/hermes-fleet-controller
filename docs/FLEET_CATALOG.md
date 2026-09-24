@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-09-23 08:00:38 UTC*
+*Automated public catalog generated on 2026-09-24 08:00:49 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -13,12 +13,13 @@ This catalog details the registered agent personas, tier allocations, and availa
 | `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | 🟢 Active |
 | `ha-agent` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Home Assistant smart home operator and environmental sensor monitor | 🟢 Active |
 | `trollbox` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Trollbox MCP integration and Telegram community assistant | 🟢 Active |
+| `venice-key-agent` | `low` | `mercury-2-5` | `$0.5/day` | Venice API Key Lifecycle, MCP Server, and Spend Monitoring Ops | 🟢 Active |
 
 ---
 
 ## Fleet Skill Library
 
-Total registered skills: **63**
+Total registered skills: **71**
 
 | Skill Module | Description & Entrypoint |
 |---|---|
@@ -28,6 +29,7 @@ Total registered skills: **63**
 | [`architecture-diagram`](../skills/architecture-diagram/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`arxiv`](../skills/arxiv/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`ascii-video`](../skills/ascii-video/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`backup`](../skills/backup/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`baoyu-infographic`](../skills/baoyu-infographic/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`blocked-page-recovery`](../skills/blocked-page-recovery/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`box`](../skills/box/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
@@ -44,6 +46,7 @@ Total registered skills: **63**
 | [`dogfood`](../skills/dogfood/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`email-inbox-triage`](../skills/email-inbox-triage/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`findmy`](../skills/findmy/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`fleet`](../skills/fleet/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`gif-search`](../skills/gif-search/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`github`](../skills/github/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`google-workspace`](../skills/google-workspace/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
@@ -52,6 +55,7 @@ Total registered skills: **63**
 | [`hermes-agent-skill-authoring`](../skills/hermes-agent-skill-authoring/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`himalaya`](../skills/himalaya/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`home-assistant-lighting`](../skills/home-assistant-lighting/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`home-assistant-logs`](../skills/home-assistant-logs/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`home-assistant-mcp`](../skills/home-assistant-mcp/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`humanizer`](../skills/humanizer/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`imessage`](../skills/imessage/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
@@ -65,11 +69,15 @@ Total registered skills: **63**
 | [`obsidian`](../skills/obsidian/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`opencode`](../skills/opencode/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`p5js`](../skills/p5js/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`pair`](../skills/pair/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`pdf`](../skills/pdf/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`popular-web-designs`](../skills/popular-web-designs/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`powerpoint`](../skills/powerpoint/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`privacy`](../skills/privacy/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`product-price-monitor`](../skills/product-price-monitor/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`pull`](../skills/pull/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`python-debugpy`](../skills/python-debugpy/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`report`](../skills/report/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`requesting-code-review`](../skills/requesting-code-review/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`sdlc-review`](../skills/sdlc-review/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`simplify-code`](../skills/simplify-code/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
@@ -81,6 +89,7 @@ Total registered skills: **63**
 | [`teams-meeting-pipeline`](../skills/teams-meeting-pipeline/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`telegram-interface`](../skills/telegram-interface/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`test-driven-development`](../skills/test-driven-development/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`venice-keyops`](../skills/venice-keyops/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`weekly-review-planning`](../skills/weekly-review-planning/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`xlsx`](../skills/xlsx/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`xurl`](../skills/xurl/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |

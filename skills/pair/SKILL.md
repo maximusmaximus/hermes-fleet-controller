@@ -1,6 +1,6 @@
 ---
 name: pair
-description: Generate a Telegram access key, one-click direct login link, and 6-digit PIN to authenticate remote devices on the Hermes Fleet Web Dashboard.
+description: Generate a 6-digit login PIN and direct Cloudflare link to authenticate remote devices on the Hermes Fleet Web Dashboard.
 ---
 
 # Dashboard Pairing & Remote Login Skill

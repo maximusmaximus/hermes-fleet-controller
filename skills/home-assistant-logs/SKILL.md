@@ -1,11 +1,11 @@
 ---
 name: home-assistant-logs
-description: Review, diagnose, and resolve Home Assistant Core log files, system errors, database corruptions, and supervisor health issues with interactive button support.
+description: Review, diagnose, and resolve <sibling-node> Core log files, system errors, database corruptions, and supervisor health issues with interactive button support.
 ---
 
-# Home Assistant Core Log Diagnostics & Remediation Skill
+# <sibling-node> Core Log Diagnostics & Remediation Skill
 
-Use this skill whenever inspecting system health, diagnosing Home Assistant Core logs, or remediating database / integration errors.
+Use this skill whenever inspecting system health, diagnosing <sibling-node> Core logs, or remediating database / integration errors.
 
 ## Core Capabilities
 1. **Live Health & Log Inspection**:
@@ -28,7 +28,7 @@ Use this skill whenever inspecting system health, diagnosing Home Assistant Core
    - When reporting logs or suggesting a solution, ALWAYS provide the choices via the `clarify` tool so Telegram displays clickable inline buttons:
      ```python
      clarify(questions=[{
-         "question": "Home Assistant Issue Detected: [Summary]. How would you like to proceed?",
+         "question": "<sibling-node> Issue Detected: [Summary]. How would you like to proceed?",
          "choices": [
              "🛠️ Apply Proposed Fix",
              "📋 Show Full Trace",
@@ -41,8 +41,8 @@ Use this skill whenever inspecting system health, diagnosing Home Assistant Core
 4. **Action Execution & Verification**:
    - To apply a fix, execute `/opt/fleet/bin/fleet-ha-health.py execute <action_type>`:
      - `repair_db`: Archives corrupt database, triggers core restart, confirms new database generation.
-     - `restart_core`: Calls `homeassistant.restart` via REST API.
+     - `restart_core`: Calls `<sibling-node>.restart` via REST API.
      - `create_backup`: Initiates automatic snapshot.
      - `clear_logs`: Clears in-memory system_log buffer.
-   - Re-check `/opt/fleet/bin/fleet-ha-health.py status` to confirm Home Assistant Core is clean.
+   - Re-check `/opt/fleet/bin/fleet-ha-health.py status` to confirm <sibling-node> Core is clean.
    - Report the resolution back to the user with green checkmark confirmation.
