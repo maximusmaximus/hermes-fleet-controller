@@ -18,7 +18,7 @@ import re
 import yaml
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 import uvicorn
 
 # Add bin directory to path for sibling module imports
@@ -273,13 +273,17 @@ def api_privacy_models(request: Request):
 @app.post("/api/auth/pair")
 async def api_pair(request: Request, response: Response):
     body = await request.json()
-    pin = body.get("pin", "")
+    key_or_pin = body.get("key") or body.get("pin", "")
     ip = get_client_ip(request)
 
-    if not fleet_pair or not hasattr(fleet_pair, "verify_pin"):
+    if not fleet_pair:
         return JSONResponse(status_code=500, content={"success": False, "message": "Pairing engine unavailable."})
 
-    ok, token, msg = fleet_pair.verify_pin(pin, ip)
+    verifier = getattr(fleet_pair, "verify_key_or_pin", getattr(fleet_pair, "verify_pin", None))
+    if not verifier:
+        return JSONResponse(status_code=500, content={"success": False, "message": "Verifier unavailable."})
+
+    ok, token, msg = verifier(key_or_pin, ip)
     if ok:
         response.set_cookie(
             key="fleet_session",
@@ -288,7 +292,7 @@ async def api_pair(request: Request, response: Response):
             httponly=True,
             samesite="lax"
         )
-        return {"success": True, "token": token, "message": "Paired successfully"}
+        return {"success": True, "token": token, "message": "Authenticated successfully"}
     return JSONResponse(status_code=403, content={"success": False, "message": msg})
 
 
@@ -486,8 +490,22 @@ async def api_fleet_backup(request: Request):
 
 # --- WEBSOCKET FEEDS ---
 
+def is_ws_authenticated(websocket: WebSocket) -> bool:
+    session_token = websocket.cookies.get("fleet_session")
+    if not session_token:
+        session_token = websocket.query_params.get("key") or websocket.query_params.get("token") or websocket.query_params.get("auth")
+    if not session_token:
+        return False
+    if fleet_pair and hasattr(fleet_pair, "verify_token"):
+        return fleet_pair.verify_token(session_token)
+    return True
+
+
 @app.websocket("/ws/metrics")
 async def ws_metrics(websocket: WebSocket):
+    if not is_ws_authenticated(websocket):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     await websocket.accept()
     try:
         while True:
@@ -505,6 +523,9 @@ async def ws_metrics(websocket: WebSocket):
 
 @app.websocket("/ws/logs/{agent}")
 async def ws_logs(websocket: WebSocket, agent: str):
+    if not is_ws_authenticated(websocket):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     await websocket.accept()
     cname = f"hermes-{agent}"
     unit_name = f"hermes-{agent}.service"
@@ -1013,10 +1034,272 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 """
 
 
+AUTH_GATE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Required — Hermes Fleet Controller</title>
+  <style>
+    :root {
+      --bg: #090d13;
+      --card-bg: #131b26;
+      --border: #233142;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-glow: rgba(88, 166, 255, 0.2);
+      --red: #f85149;
+      --green: #3fb950;
+      --font-mono: "SF Mono", "Fira Code", "Courier New", monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      max-width: 520px;
+      width: 100%;
+      padding: 36px 32px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .auth-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, #1f6feb, #58a6ff, #bc8cff);
+    }
+    .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+    h1 {
+      font-size: 20px;
+      letter-spacing: 1px;
+      color: #fff;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: var(--accent);
+      margin-bottom: 20px;
+      letter-spacing: 0.5px;
+    }
+    .desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .input-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    input {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    button {
+      width: 100%;
+      background: #1f6feb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #388bfd; }
+    button:active { transform: scale(0.99); }
+    .alert-box {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      display: none;
+      line-height: 1.4;
+    }
+    .alert-error {
+      background: rgba(248, 81, 73, 0.15);
+      border: 1px solid var(--red);
+      color: #ff7b72;
+    }
+    .alert-info {
+      background: rgba(88, 166, 255, 0.15);
+      border: 1px solid var(--accent);
+      color: #79c0ff;
+    }
+    .footer-help {
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 18px;
+      line-height: 1.5;
+    }
+    .footer-help code {
+      background: #161b22;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <div class="icon">🔐</div>
+    <h1>Authentication Required</h1>
+    <div class="subtitle">HERMES FLEET CONTROLLER // ZERO-TRUST GATEWAY</div>
+    <p class="desc">
+      Access to this swarm manager is restricted. The dashboard, metrics, and agent controls cannot be loaded until you submit an access key generated in Telegram.
+    </p>
+
+    <div class="input-group">
+      <label for="auth-key">Telegram Access Key or PIN</label>
+      <input type="text" id="auth-key" placeholder="Paste access key or 6-digit PIN..." autocomplete="off" autofocus>
+    </div>
+
+    <button id="unlock-btn" onclick="submitAuthKey()">🔓 UNLOCK DASHBOARD</button>
+
+    <div id="auth-msg" class="alert-box"></div>
+
+    <div class="footer-help">
+      Send <code>/pair</code> or <code>/login</code> to <strong>@McBottyMc_bot</strong> in Telegram to generate your one-click direct login link or access key.
+    </div>
+  </div>
+
+  <script>
+    async function submitAuthKey(keyOverride) {
+      const input = document.getElementById("auth-key");
+      const keyVal = (keyOverride || input.value || "").trim();
+      const msgBox = document.getElementById("auth-msg");
+      const btn = document.getElementById("unlock-btn");
+
+      if (!keyVal) {
+        showMsg("Please enter or paste your Telegram access key or 6-digit PIN.", "error");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "⏳ VERIFYING...";
+      showMsg("Authenticating with fleet security engine...", "info");
+
+      try {
+        const res = await fetch("/api/auth/pair", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({key: keyVal})
+        });
+        const data = await res.json();
+        if (data.success) {
+          showMsg("✓ Authenticated! Loading Fleet Dashboard...", "info");
+          setTimeout(() => {
+            window.location.href = window.location.pathname;
+          }, 400);
+        } else {
+          showMsg("✕ " + (data.message || "Invalid or expired key."), "error");
+          btn.disabled = false;
+          btn.innerText = "🔓 UNLOCK DASHBOARD";
+        }
+      } catch (err) {
+        showMsg("✕ Network error connecting to dashboard controller.", "error");
+        btn.disabled = false;
+        btn.innerText = "🔓 UNLOCK DASHBOARD";
+      }
+    }
+
+    function showMsg(text, type) {
+      const box = document.getElementById("auth-msg");
+      box.innerText = text;
+      box.className = "alert-box " + (type === "error" ? "alert-error" : "alert-info");
+      box.style.display = "block";
+    }
+
+    document.getElementById("auth-key").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") submitAuthKey();
+    });
+
+    // Auto-login if ?key= or ?token= or ?auth= is present in URL
+    window.addEventListener("DOMContentLoaded", () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlKey = params.get("key") || params.get("token") || params.get("auth");
+      if (urlKey) {
+        document.getElementById("auth-key").value = urlKey;
+        submitAuthKey(urlKey);
+      }
+    });
+  </script>
+</body>
+</html>
+"""
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.head("/")
 def index(request: Request):
-    return HTMLResponse(content=DASHBOARD_HTML)
+    # 1. URL key auto-login: ?key=<long_string> or ?token= or ?auth=
+    url_key = request.query_params.get("key") or request.query_params.get("token") or request.query_params.get("auth")
+    client_ip = get_client_ip(request)
+    if url_key and fleet_pair:
+        verifier = getattr(fleet_pair, "verify_key_or_pin", getattr(fleet_pair, "verify_pin", None))
+        if verifier:
+            ok, token, msg = verifier(url_key, client_ip)
+            if ok:
+                resp = RedirectResponse(url="/", status_code=303)
+                resp.set_cookie(
+                    key="fleet_session",
+                    value=token,
+                    max_age=86400 * 30, # 30 days
+                    httponly=True,
+                    samesite="lax"
+                )
+                return resp
+
+    # 2. Check if user is authenticated via cookie
+    if is_authenticated(request):
+        return HTMLResponse(content=DASHBOARD_HTML)
+
+    # 3. NOT authenticated: Return ONLY the Auth Gate (Lock Screen), status 401
+    return HTMLResponse(content=AUTH_GATE_HTML, status_code=401)
 
 
 def main():

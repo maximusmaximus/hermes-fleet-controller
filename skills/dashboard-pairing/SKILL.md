@@ -1,6 +1,6 @@
 ---
 name: dashboard-pairing
-description: Generate a 6-digit login PIN and direct Cloudflare link to authenticate remote devices (phones, laptops) on the Hermes Fleet Web Dashboard.
+description: Generate a Telegram access key, one-click direct login link, and 6-digit PIN to authenticate remote devices (phones, laptops) on the Hermes Fleet Web Dashboard.
 ---
 
 # Dashboard Pairing & Remote Login Skill
@@ -14,7 +14,9 @@ Run the pairing tool:
 ```
 
 ## Output Behavior
-- Returns the active 6-digit pairing PIN.
-- Provides the live, clickable Cloudflare Web Dashboard URL.
-- Explains that the PIN expires in 10 minutes and that 5 failed attempts locks the IP for 15 minutes.
+- Returns the one-click auto-login link (`https://<tunnel>/?key=<access_key>`) which bypasses the gate automatically.
+- Returns the pasteable Telegram access key and 6-digit pairing PIN.
+- Explains that the Web Dashboard cannot be loaded without this Telegram-generated key or PIN.
+- Explains that the key expires in 10 minutes and that 5 failed attempts locks the IP for 15 minutes.
 - Directly display the formatted message back to the user in Telegram chat.
+
