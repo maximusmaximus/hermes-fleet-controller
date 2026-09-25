@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-09-24 08:00:50 UTC*
+*Automated public catalog generated on 2026-09-25 08:01:02 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -10,6 +10,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 | Agent Name | Quality Tier | Default Model | Daily Allocation | Role / Capability | Status |
 |---|---|---|---|---|---|
+| `codereview-trollbox` | `specialist-high` | `openai-gpt-6-luna` | `$5.0/day` | Principal Code Reviewer & Blockchain Protocol Specialist for Trollbox browser mining | 🟢 Active |
 | `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | 🟢 Active |
 | `ha-agent` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Home Assistant smart home operator and environmental sensor monitor | 🟢 Active |
 | `trollbox` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Trollbox MCP integration and Telegram community assistant | 🟢 Active |
@@ -19,7 +20,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 ## Fleet Skill Library
 
-Total registered skills: **71**
+Total registered skills: **72**
 
 | Skill Module | Description & Entrypoint |
 |---|---|
@@ -89,6 +90,7 @@ Total registered skills: **71**
 | [`teams-meeting-pipeline`](../skills/teams-meeting-pipeline/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`telegram-interface`](../skills/telegram-interface/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`test-driven-development`](../skills/test-driven-development/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`trollbox-mining-review`](../skills/trollbox-mining-review/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`venice-keyops`](../skills/venice-keyops/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`weekly-review-planning`](../skills/weekly-review-planning/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`xlsx`](../skills/xlsx/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |

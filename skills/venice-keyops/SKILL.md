@@ -70,3 +70,10 @@ When configured as an MCP server, the following tools are available to the agent
 - `venice_get_account_balance`: Retrieve live USD/DIEM balances and alert state.
 - `venice_list_models`: Query confidential hardware enclaves (`e2ee`) and ZDR models.
 - `venice_test_inference`: Verify model latency and response health.
+
+### 8. Web Dashboard Access & Magic Link
+Generate a secure magic link and access key to unlock the Web Control Plane:
+```bash
+venice-key-manager dashboard-link
+```
+Whenever mentioning localhost or providing the Web Dashboard URL, you MUST ALWAYS execute this command or output the full web link with the token parameter (e.g. `http://localhost:8660/?token=<token>`). Never mention plain `http://localhost:8660` alone.
