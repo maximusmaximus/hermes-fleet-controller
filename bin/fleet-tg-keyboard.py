@@ -144,6 +144,7 @@ def send_kitchen_sink_keyboard(token, chat_id):
         "is_persistent": True
     }
 
+    ttl_str = f"{ttl // 3600}h" if ttl >= 3600 else f"{ttl // 60}m"
     if key:
         text = (
             "🎛️ *Hermes Fleet Controller — Operations Console*\n\n"
@@ -152,10 +153,11 @@ def send_kitchen_sink_keyboard(token, chat_id):
             f"`{direct_login_url}`\n\n"
             "🔑 *Telegram Access Key* (for pasting):\n"
             f"`{key}`\n\n"
-            f"🔢 *Short PIN*: `{pin}`  •  ⏳ *Valid For*: {ttl // 60}m\n"
-            "🛡️ *Zero-Trust Gate*: The dashboard cannot be loaded without this key or PIN.\n\n"
+            f"🔢 *Short PIN*: `{pin}`  •  ⏳ *Valid For*: {ttl_str}\n"
+            "🛡️ *PIN Protected*: The dashboard is PIN-protected and requires this PIN or link.\n\n"
             "👇 Tap any button below to trigger instant fleet operations:"
         )
+
     else:
         text = (
             "🎛️ *Hermes Fleet Controller — Operations Console*\n\n"

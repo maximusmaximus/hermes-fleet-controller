@@ -47,13 +47,18 @@ app = FastAPI(title="Hermes Fleet Controller", version="2.0")
 
 # --- AUTHENTICATION HELPERS ---
 
-def is_authenticated(request: Request) -> bool:
-    session_token = request.cookies.get("fleet_session")
-    if not session_token:
-        return False
-    if fleet_pair and hasattr(fleet_pair, "verify_token"):
-        return fleet_pair.verify_token(session_token)
-    return True
+def set_session_cookie(response: Response, token: str, request: Request):
+    proto = request.headers.get("X-Forwarded-Proto", "").lower()
+    is_https = (proto == "https") or str(request.url).startswith("https://")
+    response.set_cookie(
+        key="fleet_session",
+        value=token,
+        max_age=86400 * 30, # 30 days
+        path="/",
+        httponly=False,     # Allow client-side sync with localStorage
+        samesite="lax",
+        secure=is_https
+    )
 
 
 def get_client_ip(request: Request) -> str:
@@ -61,6 +66,34 @@ def get_client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "127.0.0.1"
+
+
+def is_authenticated(request: Request) -> bool:
+    session_token = request.cookies.get("fleet_session")
+    if not session_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            session_token = auth_header[7:].strip()
+    if not session_token:
+        session_token = request.headers.get("X-Fleet-Session")
+    if not session_token:
+        session_token = (
+            request.query_params.get("session")
+            or request.query_params.get("token")
+            or request.query_params.get("key")
+            or request.query_params.get("auth")
+        )
+
+    if not session_token:
+        return False
+    if fleet_pair:
+        if hasattr(fleet_pair, "verify_token") and fleet_pair.verify_token(session_token):
+            return True
+        if hasattr(fleet_pair, "verify_key_or_pin"):
+            ok, _, _ = fleet_pair.verify_key_or_pin(session_token, get_client_ip(request))
+            return ok
+    return True
+
 
 
 # --- SYSTEM METRICS & AGENT HELPERS ---
@@ -273,7 +306,7 @@ def api_privacy_models(request: Request):
 @app.post("/api/auth/pair")
 async def api_pair(request: Request, response: Response):
     body = await request.json()
-    key_or_pin = body.get("key") or body.get("pin", "")
+    key_or_pin = body.get("key") or body.get("pin") or body.get("token") or body.get("session", "")
     ip = get_client_ip(request)
 
     if not fleet_pair:
@@ -285,15 +318,29 @@ async def api_pair(request: Request, response: Response):
 
     ok, token, msg = verifier(key_or_pin, ip)
     if ok:
-        response.set_cookie(
-            key="fleet_session",
-            value=token,
-            max_age=86400 * 30, # 30 days
-            httponly=True,
-            samesite="lax"
-        )
+        set_session_cookie(response, token, request)
         return {"success": True, "token": token, "message": "Authenticated successfully"}
     return JSONResponse(status_code=403, content={"success": False, "message": msg})
+
+
+@app.post("/api/auth/verify-session")
+async def api_verify_session(request: Request, response: Response):
+    body = await request.json()
+    token = body.get("session") or body.get("token") or request.cookies.get("fleet_session")
+    if not token or not fleet_pair:
+        return JSONResponse(status_code=401, content={"success": False, "message": "No session token provided."})
+
+    if hasattr(fleet_pair, "verify_token") and fleet_pair.verify_token(token):
+        set_session_cookie(response, token, request)
+        return {"success": True, "valid": True, "token": token, "message": "Session valid."}
+    return JSONResponse(status_code=401, content={"success": False, "valid": False, "message": "Session expired or invalid."})
+
+
+@app.post("/api/auth/logout")
+async def api_logout(request: Request, response: Response):
+    response.delete_cookie(key="fleet_session", path="/")
+    return {"success": True, "message": "Logged out successfully."}
+
 
 
 @app.post("/api/agents/{name}/privacy")
@@ -493,12 +540,29 @@ async def api_fleet_backup(request: Request):
 def is_ws_authenticated(websocket: WebSocket) -> bool:
     session_token = websocket.cookies.get("fleet_session")
     if not session_token:
-        session_token = websocket.query_params.get("key") or websocket.query_params.get("token") or websocket.query_params.get("auth")
+        session_token = (
+            websocket.query_params.get("token")
+            or websocket.query_params.get("session")
+            or websocket.query_params.get("key")
+            or websocket.query_params.get("auth")
+        )
+    if not session_token:
+        session_token = websocket.headers.get("x-fleet-session")
+    if not session_token:
+        auth_hdr = websocket.headers.get("authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            session_token = auth_hdr[7:].strip()
     if not session_token:
         return False
-    if fleet_pair and hasattr(fleet_pair, "verify_token"):
-        return fleet_pair.verify_token(session_token)
+    if fleet_pair:
+        if hasattr(fleet_pair, "verify_token") and fleet_pair.verify_token(session_token):
+            return True
+        if hasattr(fleet_pair, "verify_key_or_pin"):
+            client_ip = websocket.client.host if websocket.client else "127.0.0.1"
+            ok, _, _ = fleet_pair.verify_key_or_pin(session_token, client_ip)
+            return ok
     return True
+
 
 
 @app.websocket("/ws/metrics")
@@ -661,13 +725,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <h1>🛰️ Hermes Fleet Controller <span class="badge badge-green" id="fleet-status-badge">ONLINE</span></h1>
       <span style="font-size:0.75rem; color:var(--text-muted);" id="tunnel-domain">Cloudflare: Loading...</span>
     </div>
-    <div style="display:flex; gap:10px;">
+    <div style="display:flex; gap:10px; align-items:center;">
       <button class="btn btn-purple" onclick="openPrivacyCatalog()">🔒 Privacy Models</button>
       <button class="btn btn-primary" onclick="openFactoryModal()">✨ Spawn Agent</button>
       <button class="btn" onclick="triggerReport()">📋 Daily Report</button>
       <button class="btn" onclick="triggerBackup()">🛡️ Backup</button>
+      <button class="btn" style="border-color:#f85149; color:#ff7b72;" onclick="lockSession()" title="Lock dashboard & disconnect session">🔒 Lock</button>
     </div>
   </header>
+
 
   <!-- Metrics Bar -->
   <div class="metrics-bar">
@@ -791,10 +857,51 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <script>
     let logWs = null;
 
+    // Save and sync session token in client storage (keeps session alive across refreshes!)
+    const activeToken = "__ACTIVE_SESSION_TOKEN__";
+    if (activeToken && activeToken.length > 10) {
+      try {
+        localStorage.setItem("fleet_session", activeToken);
+        sessionStorage.setItem("fleet_session", activeToken);
+      } catch (e) {}
+    }
+
+    function getSessionToken() {
+      try {
+        return localStorage.getItem("fleet_session") || sessionStorage.getItem("fleet_session") || "";
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function authHeaders(extra = {}) {
+      const headers = {...extra};
+      const token = getSessionToken();
+      if (token) {
+        headers["Authorization"] = "Bearer " + token;
+        headers["X-Fleet-Session"] = token;
+      }
+      return headers;
+    }
+
+    async function lockSession() {
+      if (confirm("Disconnect and lock the Hermes Fleet Dashboard?")) {
+        try {
+          localStorage.removeItem("fleet_session");
+          sessionStorage.removeItem("fleet_session");
+          await fetch("/api/auth/logout", {method: "POST"});
+        } catch (e) {}
+        document.cookie = "fleet_session=; Max-Age=0; path=/;";
+        window.location.reload();
+      }
+    }
+
     // --- WEBSOCKET METRICS & AGENT POLLING ---
     function connectMetrics() {
       const loc = window.location;
-      const wsUri = (loc.protocol === "https:" ? "wss:" : "ws:") + "//" + loc.host + "/ws/metrics";
+      const token = getSessionToken();
+      const qs = token ? ("?token=" + encodeURIComponent(token)) : "";
+      const wsUri = (loc.protocol === "https:" ? "wss:" : "ws:") + "//" + loc.host + "/ws/metrics" + qs;
       const ws = new WebSocket(wsUri);
 
       ws.onmessage = function(event) {
@@ -806,6 +913,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         setTimeout(connectMetrics, 2000);
       };
     }
+
 
     function updateDashboard(data) {
       const m = data.metrics;
@@ -983,8 +1091,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
       if (logWs) logWs.close();
       const loc = window.location;
-      const wsUri = (loc.protocol === "https:" ? "wss:" : "ws:") + "//" + loc.host + "/ws/logs/" + name;
+      const token = getSessionToken();
+      const qs = token ? ("?token=" + encodeURIComponent(token)) : "";
+      const wsUri = (loc.protocol === "https:" ? "wss:" : "ws:") + "//" + loc.host + "/ws/logs/" + name + qs;
       logWs = new WebSocket(wsUri);
+
 
       logWs.onmessage = function(e) {
         out.innerText += e.data;
@@ -1186,64 +1297,72 @@ AUTH_GATE_HTML = """<!DOCTYPE html>
 </head>
 <body>
   <div class="auth-card">
-    <div class="icon">🔐</div>
-    <h1>Authentication Required</h1>
-    <div class="subtitle">HERMES FLEET CONTROLLER // ZERO-TRUST GATEWAY</div>
-    <p class="desc">
-      Access to this swarm manager is restricted. The dashboard, metrics, and agent controls cannot be loaded until you submit an access key generated in Telegram.
-    </p>
-
-    <div class="input-group">
-      <label for="auth-key">Telegram Access Key or PIN</label>
-      <input type="text" id="auth-key" placeholder="Paste access key or 6-digit PIN..." autocomplete="off" autofocus>
+    <div style="display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; background:rgba(88,166,255,0.12); border:1px solid var(--accent); color:var(--accent); margin-bottom:18px;">
+      🔒 PIN PROTECTED
+    </div>
+    <h1>Hermes Fleet Controller</h1>
+    <div class="subtitle" style="font-size:12px; color:var(--text-muted); margin-bottom:24px; line-height:1.5;">
+      This management dashboard requires a valid 6-digit PIN or direct access link from Telegram.
     </div>
 
-    <button id="unlock-btn" onclick="submitAuthKey()">🔓 UNLOCK DASHBOARD</button>
+    <div class="input-group">
+      <label for="auth-key">6-Digit PIN or Access Link</label>
+      <input type="text" id="auth-key" placeholder="Enter 6-digit PIN or paste link..." autocomplete="off" autofocus style="font-size:16px; text-align:center;">
+    </div>
+
+    <button id="unlock-btn" onclick="submitAuthKey()">🔓 CONNECT TO DASHBOARD</button>
 
     <div id="auth-msg" class="alert-box"></div>
 
     <div class="footer-help">
-      Send <code>/pair</code> or <code>/login</code> to <strong>@McBottyMc_bot</strong> in Telegram to generate your one-click direct login link or access key.
+      Send <code>/pair</code> or <code>/login</code> to <strong>@McBottyMc_bot</strong> in Telegram to get your active 6-digit PIN or one-click access link.
     </div>
   </div>
 
   <script>
-    async function submitAuthKey(keyOverride) {
+    async function submitAuthKey(overrideVal) {
       const input = document.getElementById("auth-key");
-      const keyVal = (keyOverride || input.value || "").trim();
+      const rawVal = (overrideVal || input.value || "").trim();
       const msgBox = document.getElementById("auth-msg");
       const btn = document.getElementById("unlock-btn");
 
-      if (!keyVal) {
-        showMsg("Please enter or paste your Telegram access key or 6-digit PIN.", "error");
+      if (!rawVal) {
+        showMsg("Please enter your 6-digit PIN or paste your Telegram access link.", "error");
         return;
       }
 
       btn.disabled = true;
       btn.innerText = "⏳ VERIFYING...";
-      showMsg("Authenticating with fleet security engine...", "info");
+      showMsg("Verifying PIN with fleet security engine...", "info");
 
       try {
         const res = await fetch("/api/auth/pair", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({key: keyVal})
+          body: JSON.stringify({key: rawVal})
         });
         const data = await res.json();
         if (data.success) {
           showMsg("✓ Authenticated! Loading Fleet Dashboard...", "info");
+          // Save session token in client storage so refresh keeps dashboard open!
+          if (data.token) {
+            try {
+              localStorage.setItem("fleet_session", data.token);
+              sessionStorage.setItem("fleet_session", data.token);
+            } catch (e) {}
+          }
           setTimeout(() => {
             window.location.href = window.location.pathname;
-          }, 400);
+          }, 300);
         } else {
-          showMsg("✕ " + (data.message || "Invalid or expired key."), "error");
+          showMsg("✕ " + (data.message || "Invalid or expired PIN."), "error");
           btn.disabled = false;
-          btn.innerText = "🔓 UNLOCK DASHBOARD";
+          btn.innerText = "🔓 CONNECT TO DASHBOARD";
         }
       } catch (err) {
         showMsg("✕ Network error connecting to dashboard controller.", "error");
         btn.disabled = false;
-        btn.innerText = "🔓 UNLOCK DASHBOARD";
+        btn.innerText = "🔓 CONNECT TO DASHBOARD";
       }
     }
 
@@ -1258,13 +1377,37 @@ AUTH_GATE_HTML = """<!DOCTYPE html>
       if (e.key === "Enter") submitAuthKey();
     });
 
-    // Auto-login if ?key= or ?token= or ?auth= is present in URL
-    window.addEventListener("DOMContentLoaded", () => {
+    // Auto-restore session on page load / refresh
+    window.addEventListener("DOMContentLoaded", async () => {
+      // 1. URL key / token / pin auto-login
       const params = new URLSearchParams(window.location.search);
-      const urlKey = params.get("key") || params.get("token") || params.get("auth");
+      const urlKey = params.get("key") || params.get("token") || params.get("pin") || params.get("auth") || params.get("session");
       if (urlKey) {
         document.getElementById("auth-key").value = urlKey;
         submitAuthKey(urlKey);
+        return;
+      }
+
+      // 2. Check saved session in localStorage (keeps session alive across refreshes!)
+      const savedToken = localStorage.getItem("fleet_session");
+      if (savedToken) {
+        showMsg("Restoring saved session...", "info");
+        try {
+          const res = await fetch("/api/auth/verify-session", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({session: savedToken})
+          });
+          const data = await res.json();
+          if (data.success) {
+            showMsg("✓ Session restored! Loading Fleet Dashboard...", "info");
+            window.location.reload();
+            return;
+          } else {
+            localStorage.removeItem("fleet_session");
+            sessionStorage.removeItem("fleet_session");
+          }
+        } catch (e) {}
       }
     });
   </script>
@@ -1276,30 +1419,52 @@ AUTH_GATE_HTML = """<!DOCTYPE html>
 @app.get("/", response_class=HTMLResponse)
 @app.head("/")
 def index(request: Request):
-    # 1. URL key auto-login: ?key=<long_string> or ?token= or ?auth=
-    url_key = request.query_params.get("key") or request.query_params.get("token") or request.query_params.get("auth")
     client_ip = get_client_ip(request)
-    if url_key and fleet_pair:
+
+    # 1. URL key / token / pin / session auto-login via query param
+    url_param = (
+        request.query_params.get("key")
+        or request.query_params.get("token")
+        or request.query_params.get("pin")
+        or request.query_params.get("auth")
+        or request.query_params.get("session")
+    )
+    if url_param and fleet_pair:
+        # Check if already a valid session token
+        if hasattr(fleet_pair, "verify_token") and fleet_pair.verify_token(url_param):
+            resp = RedirectResponse(url="/", status_code=303)
+            set_session_cookie(resp, url_param, request)
+            return resp
+
+        # Verify key or PIN
         verifier = getattr(fleet_pair, "verify_key_or_pin", getattr(fleet_pair, "verify_pin", None))
         if verifier:
-            ok, token, msg = verifier(url_key, client_ip)
+            ok, token, msg = verifier(url_param, client_ip)
             if ok:
                 resp = RedirectResponse(url="/", status_code=303)
-                resp.set_cookie(
-                    key="fleet_session",
-                    value=token,
-                    max_age=86400 * 30, # 30 days
-                    httponly=True,
-                    samesite="lax"
-                )
+                set_session_cookie(resp, token, request)
                 return resp
 
-    # 2. Check if user is authenticated via cookie
+    # 2. Check if user is authenticated via cookie, Authorization Bearer, or query params
     if is_authenticated(request):
-        return HTMLResponse(content=DASHBOARD_HTML)
+        token = request.cookies.get("fleet_session") or ""
+        if not token:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:].strip()
+        if not token:
+            token = request.headers.get("X-Fleet-Session") or request.query_params.get("session") or request.query_params.get("token") or ""
 
-    # 3. NOT authenticated: Return ONLY the Auth Gate (Lock Screen), status 401
+        # Inject active session token so the browser client saves it to localStorage
+        content = DASHBOARD_HTML.replace("__ACTIVE_SESSION_TOKEN__", token)
+        resp = HTMLResponse(content=content)
+        if token:
+            set_session_cookie(resp, token, request)
+        return resp
+
+    # 3. NOT authenticated: Return ONLY the PIN Protection Lock Screen (401)
     return HTMLResponse(content=AUTH_GATE_HTML, status_code=401)
+
 
 
 def main():

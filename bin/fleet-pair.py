@@ -17,7 +17,7 @@ import secrets
 AUTH_DIR = "/opt/fleet/shared-workspace" if os.path.isdir("/opt/fleet/shared-workspace") else "/opt/fleet"
 AUTH_FILE = os.environ.get("FLEET_AUTH_FILE", os.path.join(AUTH_DIR, "web-auth.json"))
 TUNNEL_FILE = "/opt/fleet/tunnel-url.txt"
-PIN_EXPIRY_SECONDS = 600       # 10 minutes
+PIN_EXPIRY_SECONDS = 86400     # 24 hours
 LOCKOUT_THRESHOLD = 5          # 5 attempts
 LOCKOUT_DURATION_SECONDS = 900 # 15 minutes
 
@@ -77,6 +77,28 @@ def verify_key_or_pin(attempt, client_ip):
     if not attempt:
         return False, None, "Access key or PIN required."
     attempt = str(attempt).strip()
+
+    # If full URL or query string was pasted, extract key/pin/token
+    if "?" in attempt:
+        try:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(attempt)
+            qs = urllib.parse.parse_qs(parsed.query)
+            extracted = qs.get("key", [""])[0] or qs.get("token", [""])[0] or qs.get("pin", [""])[0] or qs.get("auth", [""])[0] or qs.get("session", [""])[0]
+            if extracted:
+                attempt = extracted
+        except Exception:
+            pass
+
+    # Clean numeric PIN (allow 123-456 or 123 456)
+    clean_numeric = attempt.replace(" ", "").replace("-", "")
+    if clean_numeric.isdigit() and len(clean_numeric) == 6:
+        attempt = clean_numeric
+
+    # If attempt is already an active session token, accept immediately
+    if "." in attempt and verify_token(attempt):
+        return True, attempt, "Success"
+
     db = load_auth_db()
     now = int(time.time())
 
@@ -93,6 +115,7 @@ def verify_key_or_pin(attempt, client_ip):
 
     if now > pin_expiry or (not active_pin and not active_key):
         return False, None, "Access key or PIN has expired or has not been generated."
+
 
     match_pin = bool(active_pin and hmac.compare_digest(attempt, str(active_pin).strip()))
     match_key = bool(active_key and hmac.compare_digest(attempt, str(active_key).strip()))
@@ -205,15 +228,17 @@ def main():
         }, indent=2))
         sys.exit(0)
 
+    ttl_str = f"{ttl // 3600} hours" if ttl >= 3600 else f"{ttl // 60} minutes"
     tg_text = (
         "🔐 *HERMES FLEET DASHBOARD ACCESS*\n\n"
         f"⚡ *One-Click Auto-Login Link*:\n{direct_login_url}\n\n"
         f"🔑 *Telegram Access Key* (for pasting):\n`{key}`\n\n"
         f"🔢 *Short PIN*: `{pin}`\n"
-        f"⏳ *Valid For*: {ttl // 60} minutes ({ttl}s)\n"
-        "🛡️ *Security*: The dashboard interface will NOT load until this key or PIN is submitted.\n\n"
-        "👉 Tap the link above to immediately unlock the dashboard, or paste the key into the login gate."
+        f"⏳ *Valid For*: {ttl_str}\n"
+        "🛡️ *Security*: The dashboard interface is PIN-protected and requires this key or PIN.\n\n"
+        "👉 Tap the link above to immediately unlock the dashboard, or enter PIN into the login gate."
     )
+
 
     if len(sys.argv) > 1 and sys.argv[1] in ("--tg", "--telegram"):
         print(tg_text)
