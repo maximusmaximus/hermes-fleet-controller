@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-09-25 08:01:03 UTC*
+*Automated public catalog generated on 2026-09-26 08:01:04 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -20,7 +20,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 ## Fleet Skill Library
 
-Total registered skills: **72**
+Total registered skills: **74**
 
 | Skill Module | Description & Entrypoint |
 |---|---|
@@ -71,6 +71,7 @@ Total registered skills: **72**
 | [`opencode`](../skills/opencode/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`p5js`](../skills/p5js/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`pair`](../skills/pair/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`payment-notify`](../skills/payment-notify/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`pdf`](../skills/pdf/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`popular-web-designs`](../skills/popular-web-designs/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`powerpoint`](../skills/powerpoint/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
@@ -80,6 +81,7 @@ Total registered skills: **72**
 | [`python-debugpy`](../skills/python-debugpy/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`report`](../skills/report/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`requesting-code-review`](../skills/requesting-code-review/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`safex-rpc`](../skills/safex-rpc/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`sdlc-review`](../skills/sdlc-review/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`simplify-code`](../skills/simplify-code/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`songsee`](../skills/songsee/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
