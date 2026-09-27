@@ -297,31 +297,35 @@ def connect_agent(cname_or_id, force=False, notify=True):
         except Exception:
             pass
 
-    # 7. Record in Changelog
-    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    entry = {
-        "timestamp": ts,
-        "event": "agent_auto_connected",
-        "agent": agent_name,
-        "container": raw_name,
-        "container_id": c_id,
-        "model": model,
-        "ip": c_ip,
-        "is_new": is_new
-    }
-    with open(CHANGELOG, "a") as f:
-        f.write(json.dumps(entry) + "\n")
-
-    # 8. Refresh Inventory
-    scan_script = os.path.join(FLEET_DIR, "bin", "fleet-scan.py")
-    if os.path.exists(scan_script):
+    # 7. Record in Changelog (only on genuine new agent adoption)
+    if is_new:
+        ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        entry = {
+            "timestamp": ts,
+            "event": "agent_auto_connected",
+            "agent": agent_name,
+            "container": raw_name,
+            "container_id": c_id,
+            "model": model,
+            "ip": c_ip,
+            "is_new": is_new
+        }
         try:
-            subprocess.run(["python3", scan_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            with open(CHANGELOG, "a") as f:
+                f.write(json.dumps(entry) + "\n")
         except Exception:
             pass
 
-    # 9. Send Telegram Notification if new or requested
-    if notify:
+    # 8. Refresh Inventory (async non-blocking)
+    scan_script = os.path.join(FLEET_DIR, "bin", "fleet-scan.py")
+    if os.path.exists(scan_script):
+        try:
+            subprocess.Popen(["python3", scan_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+    # 9. Send Telegram Notification ONLY if this is genuinely a NEW agent being adopted for the first time
+    if notify and is_new:
         tunnel_url = get_tunnel_url()
         notify_script = os.path.join(FLEET_DIR, "bin", "fleet-telegram-notify.sh")
         if os.path.exists(notify_script):
@@ -337,7 +341,7 @@ def connect_agent(cname_or_id, force=False, notify=True):
                 f"🌐 *Web Dashboard*: {tunnel_url}"
             )
             try:
-                subprocess.run([notify_script, msg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run([notify_script, "--tag", "agent_connect", "--cooldown", "86400", msg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:
                 pass
 

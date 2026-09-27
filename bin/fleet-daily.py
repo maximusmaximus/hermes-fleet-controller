@@ -137,7 +137,11 @@ def run_daily_digest(force_notify=False):
             f"Model map: {model_map_str}\n"
             f"Controller: kimi-k3 {ctrl.get('hermes_version', 'v0.21.3')} live=yes"
         )
-        subprocess.call(["/opt/fleet/bin/fleet-telegram-notify.sh", msg])
+        cmd = ["/opt/fleet/bin/fleet-telegram-notify.sh", "--tag", "daily_digest", "--cooldown", "43200"]
+        if force_notify:
+            cmd.append("--force")
+        cmd.append(msg)
+        subprocess.call(cmd)
         print(msg)
     else:
         print("No changes detected in fleet inventory.")

@@ -51,9 +51,13 @@ def periodic_scan_loop(interval=15):
             time.sleep(1)
 
 
+_recent_events = {}
+_recent_lock = threading.Lock()
+
+
 def watch_podman_events():
     """Streams live container events from Podman to react with sub-second latency."""
-    global running
+    global running, _recent_events
     while running:
         try:
             proc = subprocess.Popen(
@@ -68,19 +72,29 @@ def watch_podman_events():
                 if not line:
                     break
                 cname = line.strip()
-                if cname and not cname.startswith("fleet-controller"):
-                    print(f"[*] Podman event: container '{cname}' started. Triggering manager connection...")
-                    # Run connection in background thread so events stream isn't blocked
-                    t = threading.Thread(
-                        target=lambda name: subprocess.run(
-                            ["python3", CONNECT_SCRIPT, name],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL
-                        ),
-                        args=(cname,)
-                    )
-                    t.daemon = True
-                    t.start()
+                if not cname or cname.startswith("fleet-controller"):
+                    continue
+
+                now = time.time()
+                with _recent_lock:
+                    last_time = _recent_events.get(cname, 0)
+                    if now - last_time < 60:
+                        # Debounce rapid restart storms
+                        continue
+                    _recent_events[cname] = now
+
+                print(f"[*] Podman event: container '{cname}' started. Triggering manager connection...")
+                # Run connection in background thread so events stream isn't blocked
+                t = threading.Thread(
+                    target=lambda name: subprocess.run(
+                        ["python3", CONNECT_SCRIPT, name],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    ),
+                    args=(cname,)
+                )
+                t.daemon = True
+                t.start()
         except Exception as e:
             if running:
                 print(f"[-] Podman events stream error: {e}. Retrying in 5s...", file=sys.stderr)

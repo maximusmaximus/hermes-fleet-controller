@@ -291,7 +291,11 @@ def chunk_and_send_telegram(full_text):
     # Send each chunk sequentially
     for i, c in enumerate(chunks, 1):
         header = f"*(Part {i}/{len(chunks)})*\n" if len(chunks) > 1 else ""
-        subprocess.call([NOTIFY_SCRIPT, header + c])
+        cmd = [NOTIFY_SCRIPT, "--tag", "daily_report", "--cooldown", "43200"]
+        if force:
+            cmd.append("--force")
+        cmd.append(header + c)
+        subprocess.call(cmd)
         time.sleep(0.5)
 
     return len(chunks)
@@ -316,7 +320,8 @@ def main():
         print(report_text)
 
     if "--send" in sys.argv or "-s" in sys.argv:
-        sent_chunks = chunk_and_send_telegram(report_text)
+        force = ("--force" in sys.argv or "-f" in sys.argv)
+        sent_chunks = chunk_and_send_telegram(report_text, force=force)
         print(f"\n[OK] Report successfully dispatched to Telegram in {sent_chunks} message chunk(s).")
 
 
