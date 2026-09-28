@@ -90,6 +90,9 @@ def sanitize_text(text: str, raw_secrets: dict) -> str:
     # 4. Telegram bot username if specific
     sanitized = re.sub(r"@[A-Za-z0-9_]*bot\b", "@<your_telegram_bot>", sanitized, flags=re.IGNORECASE)
 
+    # 4b. Cloudflare trycloudflare tunnel URLs
+    sanitized = re.sub(r"https?://[a-zA-Z0-9_-]+\.trycloudflare\.com", "https://<REDACTED_DASHBOARD_URL>", sanitized)
+
     # 5. IPv4 addresses (preserve 0.0.0.0 or localhost documentation references if desired, redact private/public IPs)
     def ip_replacer(match):
         ip = match.group(0)
@@ -102,10 +105,11 @@ def sanitize_text(text: str, raw_secrets: dict) -> str:
     # 6. MAC addresses
     sanitized = re.sub(r"\b([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})\b", "<REDACTED_MAC>", sanitized)
 
-    # 7. Private user paths and hostnames
+    # 7. Private user paths, block devices, and hostnames
+    sanitized = re.sub(r"/dev/(sd[a-z0-9]*|nvme[0-9a-z]*)", "/dev/<disk>", sanitized)
     sanitized = re.sub(r"/home/[a-zA-Z0-9_-]+", "/home/<user>", sanitized)
     sanitized = re.sub(r"[A-Z]:\\Users\\[a-zA-Z0-9_-]+", lambda m: r"C:\Users\<user>", sanitized)
-    for host in ["molt", "lobsterdawg", "deb", "home assistant", "homeassistant"]:
+    for host in ["molt", "lobsterdawg", "deb", "home assistant", "homeassistant", "maximusprime"]:
         sanitized = re.sub(rf"\b{re.escape(host)}\b", "<sibling-node>", sanitized, flags=re.IGNORECASE)
 
     # 8. SSH Private keys

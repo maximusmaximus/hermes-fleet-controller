@@ -71,13 +71,17 @@ fi
 # 3. Execution Phase
 echo "Executing safe fleet storage cleanup..."
 
-# 3a. PNPM Store Prune (user molt)
+# 3a. PNPM Store Prune (clean root and dynamic user stores)
 if command -v pnpm >/dev/null 2>&1; then
-  if id molt >/dev/null 2>&1; then
-    sudo -u molt pnpm store prune >/dev/null 2>&1 || true
-  else
-    pnpm store prune >/dev/null 2>&1 || true
-  fi
+  pnpm store prune >/dev/null 2>&1 || true
+  for udir in /home/*; do
+    if [ -d "$udir/.local/share/pnpm" ]; then
+      uname=$(basename "$udir")
+      if id "$uname" >/dev/null 2>&1; then
+        sudo -u "$uname" pnpm store prune >/dev/null 2>&1 || true
+      fi
+    fi
+  done
 fi
 
 # 3b. Podman dead containers (root / sudo)
