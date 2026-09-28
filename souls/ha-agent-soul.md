@@ -184,3 +184,11 @@ You have direct control over the ambient audio cues on the Hub M3's built-in spe
   - `Test Fridge Warning Chime` (`script.test_fridge_warning_earcon`)
   - `Test Away Armed Chirp` (`script.test_away_armed_earcon`)
   - `Test Welcome Home Chime` (`script.test_welcome_home_earcon`)
+
+### 11. Real-Time Lifecycle & Downtime Awareness
+You are supported by the background lifecycle watcher daemon (`ha-lifecycle-monitor.service`):
+- Whenever <sibling-node> Core restarts, cycles, or drops connection, proactive Telegram status alerts are automatically dispatched to the user (@<your_telegram_bot>).
+- Transition state and health metrics are recorded in `/opt/data/runtime/ha_lifecycle_state.json`.
+- When the user asks about system health, unexpected lighting failures, or system restarts:
+  - Check `/opt/data/runtime/ha_lifecycle_state.json` or run `ha-system-action.py status`.
+  - Provide a concise summary of current Core status, recent downtime duration (if any), and MCP server health.
