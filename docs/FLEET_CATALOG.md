@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-09-27 09:35:56 UTC*
+*Automated public catalog generated on 2026-09-27 19:11:12 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -13,6 +13,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 | `codereview-trollbox` | `specialist-high` | `openai-gpt-6-luna` | `$5.0/day` | Principal Code Reviewer & Blockchain Protocol Specialist for Trollbox browser mining | 🟢 Active |
 | `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | 🟢 Active |
 | `ha-agent` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Home Assistant smart home operator and environmental sensor monitor | 🟢 Active |
+| `janitor` | `medium` | `deepseek-v4-flash` | `$0.5/day` | Storage hygiene and autonomous cache cleanup | 🟢 Active |
 | `trollbox` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Trollbox MCP integration and Telegram community assistant | 🟢 Active |
 | `venice-key-agent` | `low` | `mercury-2-5` | `$0.5/day` | Venice API Key Lifecycle, MCP Server, and Spend Monitoring Ops | 🟢 Active |
 
@@ -20,7 +21,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 ## Fleet Skill Library
 
-Total registered skills: **74**
+Total registered skills: **75**
 
 | Skill Module | Description & Entrypoint |
 |---|---|
@@ -88,6 +89,7 @@ Total registered skills: **74**
 | [`songwriting-and-ai-music`](../skills/songwriting-and-ai-music/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`spawn-hermes-agent`](../skills/spawn-hermes-agent/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`spike`](../skills/spike/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`storage-cleaner`](../skills/storage-cleaner/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`systematic-debugging`](../skills/systematic-debugging/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`teams-meeting-pipeline`](../skills/teams-meeting-pipeline/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`telegram-interface`](../skills/telegram-interface/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
