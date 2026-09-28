@@ -18,8 +18,41 @@ import threading
 FLEET_DIR = "/opt/fleet"
 CONNECT_SCRIPT = os.path.join(FLEET_DIR, "bin", "fleet-connect-agent.py")
 SCAN_SCRIPT = os.path.join(FLEET_DIR, "bin", "fleet-scan.py")
+PRUNE_REQ = os.path.join(FLEET_DIR, "shared-workspace", "prune.req")
+PRUNE_OUT = os.path.join(FLEET_DIR, "shared-workspace", "prune.out")
+PRUNE_SCRIPT = os.path.join(FLEET_DIR, "bin", "fleet-prune.sh")
 
 running = True
+
+
+def watch_prune_requests():
+    """Processes on-demand prune requests from sandboxed child agents."""
+    global running
+    while running:
+        if os.path.exists(PRUNE_REQ):
+            try:
+                with open(PRUNE_REQ, "r", encoding="utf-8") as f:
+                    args_line = f.read().strip()
+                try:
+                    os.remove(PRUNE_REQ)
+                except Exception:
+                    pass
+                args = [PRUNE_SCRIPT]
+                if args_line:
+                    args.extend(args_line.split())
+                res = subprocess.run(
+                    args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                )
+                with open(PRUNE_OUT, "w", encoding="utf-8") as f:
+                    f.write(res.stdout or "")
+            except Exception as e:
+                try:
+                    with open(PRUNE_OUT, "w", encoding="utf-8") as f:
+                        f.write(f"Error executing prune: {e}\n")
+                except Exception:
+                    pass
+        time.sleep(0.5)
+
 
 
 def handle_signal(sig, frame):
@@ -114,10 +147,14 @@ def main():
     except Exception as e:
         print(f"[-] Initial scan warning: {e}", file=sys.stderr)
 
-    # 2. Start polling thread
+    # 2. Start polling thread & prune request listener
     poll_thread = threading.Thread(target=periodic_scan_loop, args=(15,))
     poll_thread.daemon = True
     poll_thread.start()
+
+    prune_thread = threading.Thread(target=watch_prune_requests)
+    prune_thread.daemon = True
+    prune_thread.start()
 
     # 3. Stream live podman events on main thread
     watch_podman_events()

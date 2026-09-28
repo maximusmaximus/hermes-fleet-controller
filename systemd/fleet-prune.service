@@ -1,0 +1,10 @@
+[Unit]
+Description=Hermes Fleet Storage Hygiene & Pruning Service
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fleet/bin/fleet-prune.sh
+User=root
+StandardOutput=journal
+StandardError=journal
