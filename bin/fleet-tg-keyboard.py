@@ -42,7 +42,7 @@ def get_tunnel_url():
                     return url
         except Exception:
             pass
-    return "https://worship-him-knight-jul.trycloudflare.com"
+    return os.environ.get("FLEET_DASHBOARD_URL", "http://127.0.0.1:8650")
 
 
 def tg_request(token, method, payload=None):

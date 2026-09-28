@@ -11,7 +11,7 @@ QUALITY="medium"
 SKILL_DESC=""
 DAILY_USD="2.0"
 MCP_HA="false"
-HA_URL="http://192.168.50.106:8123/api/mcp"
+HA_URL="${HA_URL:-http://homeassistant.local:8123/api/mcp}"
 HA_TOKEN="${HA_TOKEN:-${MCP_HOMEASSISTANT_API_KEY:-}}"
 
 while [[ $# -gt 0 ]]; do

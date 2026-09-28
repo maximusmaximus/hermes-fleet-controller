@@ -12,25 +12,22 @@ import urllib.request
 import urllib.error
 import time
 
-HA_URL = "http://192.168.50.106:8123"
+HA_URL = os.environ.get("HA_URL", "http://homeassistant.local:8123")
 SECRETS_FILES = [
-    "/opt/fleet/secrets.env",
-    "/opt/fleet/agents/ha-agent/.env"
+    "/opt/fleet/agents/ha-agent/.env",
+    "/opt/fleet/secrets.env"
 ]
 
 def load_env():
     env = {}
     for sf in SECRETS_FILES:
         if os.path.exists(sf):
-            try:
-                with open(sf) as f:
-                    for line in f:
-                        line = line.strip()
-                        if "=" in line and not line.startswith("#"):
-                            k, v = line.split("=", 1)
-                            env[k.strip()] = v.strip("'\" ")
-            except Exception:
-                pass
+            with open(sf) as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        env[k.strip()] = v.strip("'\" ")
     return env
 
 def get_ha_headers(env):
@@ -60,7 +57,7 @@ def call_ha_ws(msg):
     import websockets
     env = load_env()
     token = env.get("MCP_HOMEASSISTANT_API_KEY") or env.get("HOMEASSISTANT_TOKEN")
-    ws_url = "ws://192.168.50.106:8123/api/websocket"
+    ws_url = f"{HA_URL.replace('http://', 'ws://').replace('https://', 'wss://')}/api/websocket"
     
     async def _ws():
         async with websockets.connect(ws_url, timeout=10) as ws:
@@ -126,7 +123,7 @@ def get_status():
 def diagnose_with_venice(errors):
     env = load_env()
     key = env.get("VENICE_API_KEY", "")
-    model = "deepseek-v4-flash"
+    model = env.get("CONTROLLER_MODEL") or "deepseek-v4-flash"
     
     prompt = (
         "You are ha-agent, autonomous Home Assistant Site Reliability Engineer.\n"
@@ -188,7 +185,9 @@ def execute_action(action_type):
 
     elif action_type == "repair_db":
         import subprocess
-        cmd = 'ssh -o BatchMode=yes -o Ciphers=aes256-gcm@openssh.com maximusprime@192.168.50.106 "sudo mv /homeassistant/home-assistant_v2.db /homeassistant/home-assistant_v2.db.corrupt_$(date +%s)"'
+        ha_user = os.environ.get("HA_SSH_USER", "root")
+        ha_host = os.environ.get("HA_SSH_HOST", "homeassistant.local")
+        cmd = f'ssh -o BatchMode=yes -o Ciphers=aes256-gcm@openssh.com {ha_user}@{ha_host} "sudo mv /homeassistant/home-assistant_v2.db /homeassistant/home-assistant_v2.db.corrupt_$(date +%s)"'
         r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         try:
             call_ha_api("/api/services/homeassistant/restart", method="POST", data={})
