@@ -1,0 +1,10 @@
+[Unit]
+Description=Hermes Fleet 6-Hour Health & Uptime Telegram Digest Timer
+
+[Timer]
+OnCalendar=00/6:00:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

@@ -136,6 +136,16 @@ def collect_metrics():
         except Exception:
             pass
 
+    # Swarm Health Score
+    swarm_score = 100.0
+    h_file = os.path.join(FLEET_DIR, "run", "agent_health_state.json")
+    if os.path.exists(h_file):
+        try:
+            with open(h_file) as f:
+                swarm_score = json.load(f).get("swarm_score_pct", 100.0)
+        except Exception:
+            pass
+
     return {
         "load": f"{load1:.2f}, {load5:.2f}, {load15:.2f}",
         "disk_free_gb": round(free_gb, 1),
@@ -145,6 +155,7 @@ def collect_metrics():
         "mem_avail_mb": mem_avail_mb,
         "venice_ms": venice_ms,
         "tunnel_url": tunnel_url,
+        "swarm_score": swarm_score,
         "timestamp": int(time.time())
     }
 
@@ -152,6 +163,15 @@ def collect_metrics():
 def list_swarm_agents():
     agents_dir = os.path.join(FLEET_DIR, "agents")
     agents = []
+
+    health_map = {}
+    h_file = os.path.join(FLEET_DIR, "run", "agent_health_state.json")
+    if os.path.exists(h_file):
+        try:
+            with open(h_file) as f:
+                health_map = json.load(f).get("agents", {})
+        except Exception:
+            pass
 
     # Get Podman containers
     try:
@@ -257,9 +277,21 @@ def list_swarm_agents():
             except Exception:
                 pass
 
+        h_info = health_map.get(name, {})
+        h_status = h_info.get("status", "healthy" if status == "running" else "stopped")
+        h_lat = h_info.get("latency_ms", -1.0)
+        h_restarts = h_info.get("restarts_24h", 0)
+        h_cb = h_info.get("circuit_broken", False)
+        h_diag = h_info.get("diagnosis", "")
+
         agents.append({
             "name": name,
             "status": status,
+            "health_status": h_status,
+            "latency_ms": h_lat,
+            "restarts_24h": h_restarts,
+            "circuit_broken": h_cb,
+            "diagnosis": h_diag,
             "model": model,
             "is_e2ee": is_e2ee,
             "firewall": fw_mode,
@@ -277,6 +309,32 @@ def list_swarm_agents():
 @app.head("/api/health")
 def api_health():
     return {"status": "ok", "service": "hermes-fleet-dashboard", "timestamp": time.time()}
+
+
+@app.get("/api/health/fleet")
+def api_fleet_health(request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    state_file = os.path.join(FLEET_DIR, "run", "agent_health_state.json")
+    if os.path.exists(state_file):
+        try:
+            with open(state_file) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"status": "ok", "message": "Health state initializing"}
+
+
+@app.post("/api/agents/{name}/heal")
+def api_heal_agent(name: str, request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    watchdog_script = os.path.join(FLEET_DIR, "bin", "fleet-watchdog.py")
+    if os.path.exists(watchdog_script):
+        res = subprocess.run(["python3", watchdog_script, "--heal", name], capture_output=True, text=True)
+        return {"success": res.returncode == 0, "output": res.stdout.strip() or res.stderr.strip()}
+    return {"success": False, "output": "Watchdog script not found"}
+
 
 
 @app.get("/api/metrics")
@@ -753,6 +811,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <div class="label">Venice API Latency</div>
       <div class="val" id="metric-venice">-- ms</div>
     </div>
+    <div class="metric-card">
+      <div class="label">Swarm Health</div>
+      <div class="val" id="metric-health" style="color:var(--green);">100% 🟢</div>
+    </div>
   </div>
 
   <!-- Agent Swarm Section -->
@@ -923,6 +985,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById("metric-venice").innerText = m.venice_ms >= 0 ? `${m.venice_ms} ms` : "Offline";
       document.getElementById("tunnel-domain").innerText = `Access: ${m.tunnel_url}`;
 
+      const hEl = document.getElementById("metric-health");
+      if (hEl && m.swarm_score !== undefined) {
+        const sc = m.swarm_score;
+        const hColor = sc >= 90 ? "var(--green)" : (sc >= 60 ? "var(--yellow)" : "var(--red)");
+        const hIcon = sc >= 90 ? "🟢" : (sc >= 60 ? "🟡" : "🔴");
+        hEl.innerText = `${sc}% ${hIcon}`;
+        hEl.style.color = hColor;
+      }
+
       const agents = data.agents || [];
       document.getElementById("agent-count").innerText = agents.length;
 
@@ -935,10 +1006,21 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         const isRun = a.status === "running";
         const isEnc = a.is_e2ee;
 
+        const hStatus = a.health_status || (isRun ? "healthy" : "stopped");
+        let hBadge = "badge-green";
+        let hIcon = "🟢";
+        if (hStatus === "degraded") { hBadge = "badge-yellow"; hIcon = "🟡"; }
+        else if (hStatus === "quarantined") { hBadge = "badge-red"; hIcon = "⚠️"; }
+        else if (hStatus === "failed" || hStatus === "stopped") { hBadge = "badge-red"; hIcon = "🔴"; }
+
+        const latChip = (a.latency_ms && a.latency_ms >= 0) ? `<span style="font-size:0.75rem; color:var(--cyan); margin-left:6px; font-weight:600;">⚡ ${a.latency_ms}ms</span>` : '';
+        const rstRow = (a.restarts_24h && a.restarts_24h > 0) ? `<div class="agent-row"><span class="label">Self-Heals (24h):</span><span class="badge badge-yellow">${a.restarts_24h}</span></div>` : '';
+        const cbRow = a.circuit_broken ? `<div class="agent-row" style="color:var(--red); font-weight:600;"><span class="label">Circuit Breaker:</span><span>⚠️ TRIPPED</span></div>` : '';
+
         card.innerHTML = `
           <div class="agent-header">
-            <span class="agent-title">${a.name}</span>
-            <span class="badge ${isRun ? 'badge-green' : 'badge-red'}">${a.status}</span>
+            <span class="agent-title">${a.name} ${latChip}</span>
+            <span class="badge ${hBadge}">${hIcon} ${hStatus.toUpperCase()}</span>
           </div>
           <div class="agent-row">
             <span class="label">Model:</span>
@@ -952,6 +1034,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             <span class="label">Daily Quota:</span>
             <span class="badge badge-yellow">$${a.quota_usd}/day</span>
           </div>
+          ${rstRow}
+          ${cbRow}
           <div class="agent-row">
             <span class="label">🔒 Encrypted (E2EE):</span>
             <div class="switch-group">
@@ -971,11 +1055,28 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           </div>
           <div style="display:flex; gap:8px; margin-top:8px;">
             <button class="btn" style="flex:1;" onclick="openLogs('${a.name}')">📜 Logs</button>
+            <button class="btn btn-purple" style="flex:1;" onclick="healAgent('${a.name}', this)" title="Run watchdog self-heal">🔄 Heal</button>
             ${a.name !== 'fleet-controller' ? `<button class="btn" style="color:var(--red);" onclick="teardownAgent('${a.name}')">🛑 Remove</button>` : ''}
           </div>
         `;
         container.appendChild(card);
       });
+    }
+
+    async function healAgent(name, btn) {
+      if (btn) btn.innerText = "⏳ Healing...";
+      try {
+        const res = await fetch(`/api/agents/${name}/heal`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"}
+        });
+        const data = await res.json();
+        alert(data.output || "Healing completed.");
+      } catch (e) {
+        alert("Failed to trigger self-healing: " + e);
+      } finally {
+        if (btn) btn.innerText = "🔄 Heal";
+      }
     }
 
     // --- ACTIONS ---

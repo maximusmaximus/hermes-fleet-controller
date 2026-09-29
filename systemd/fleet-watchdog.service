@@ -1,0 +1,10 @@
+[Unit]
+Description=Hermes Fleet Autonomous Health Watchdog & Self-Healing Sentinel
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fleet/bin/fleet-watchdog.py --probe
+User=root
+StandardOutput=journal
+StandardError=journal
