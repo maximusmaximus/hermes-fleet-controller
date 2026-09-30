@@ -29,7 +29,7 @@ fi
 
 FLEET_DIR="/opt/fleet"
 
-mkdir -p "${FLEET_DIR}"/{bin,skills,souls,config,agents/fleet-controller,systemd,quadlets,ssh,backups,shared-workspace}
+mkdir -p "${FLEET_DIR}"/{bin,skills,souls,config,agents/fleet-controller,systemd,quadlets,ssh,backups,shared-workspace,patches,memory}
 chmod 755 "${FLEET_DIR}"
 chmod 700 "${FLEET_DIR}/ssh"
 chmod 700 "${FLEET_DIR}/backups"
@@ -57,23 +57,29 @@ ln -sf "${FLEET_DIR}/bin/fleet-watchdog.py" /usr/local/bin/fleet-watchdog
 ln -sf "${FLEET_DIR}/bin/fleet-connect-agent.py" /usr/local/bin/fleet-connect-agent
 ln -sf "${FLEET_DIR}/bin/fleet-boot-check.sh" /usr/local/bin/fleet-boot-check
 
-# 5. Copy skills and souls
+# 5. Copy skills, souls, and patches
 cp -r "${SCRIPT_DIR}/skills/"* "${FLEET_DIR}/skills/"
 cp -r "${SCRIPT_DIR}/souls/"* "${FLEET_DIR}/souls/"
+cp -r "${SCRIPT_DIR}/patches/"* "${FLEET_DIR}/patches/" 2>/dev/null || true
 
 # 6. Copy systemd units
 cp "${SCRIPT_DIR}/systemd/"* /etc/systemd/system/
 ln -sf /etc/systemd/system/hermes-fleet-controller.service /etc/systemd/system/hermes-gateway.service
 
-# Setup config template if not present
+# Setup config templates and required mount files
 if [ ! -f "${FLEET_DIR}/vm-map.yaml" ]; then
   cp "${SCRIPT_DIR}/config/vm-map.example.yaml" "${FLEET_DIR}/vm-map.yaml"
 fi
+if [ ! -f "${FLEET_DIR}/agents/fleet-controller/config.yaml" ]; then
+  cp "${SCRIPT_DIR}/config/config.example.yaml" "${FLEET_DIR}/agents/fleet-controller/config.yaml"
+fi
+touch "${FLEET_DIR}/inventory.yaml"
+touch "${FLEET_DIR}/changelog.jsonl"
 
-# 7. Run interactive key setup
+# 7. Run key setup
 echo ""
 echo "[*] Launching key attachment and credentials setup..."
-"${FLEET_DIR}/bin/fleet-attach-keys.sh"
+"${FLEET_DIR}/bin/fleet-attach-keys.sh" "$@"
 
 # 8. Enable and start systemd units
 systemctl daemon-reload

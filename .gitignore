@@ -19,7 +19,10 @@ models-cache.json
 
 # Agent dynamic data
 agents/
+memory/
+tunnel-url.txt
 .cache/
 __pycache__/
 *.pyc
 .venv/
+

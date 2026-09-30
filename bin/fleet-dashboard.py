@@ -42,6 +42,11 @@ try:
 except Exception:
     venice_resolve = None
 
+try:
+    fleet_scan = importlib.import_module("fleet-scan")
+except Exception:
+    fleet_scan = None
+
 app = FastAPI(title="Hermes Fleet Controller", version="2.0")
 
 
@@ -301,6 +306,43 @@ def list_swarm_agents():
         })
 
     return agents
+
+
+def load_fleet_devices():
+    candidates = [
+        os.path.join(FLEET_DIR, "memory", "infrastructure-state.json"),
+        "/mnt/d/mcoverseer/memory/infrastructure-state.json",
+        "D:/mcoverseer/memory/infrastructure-state.json",
+        os.path.join(FLEET_DIR, "infrastructure-state.json"),
+        os.path.expanduser("~/.fleet/infrastructure-state.json")
+    ]
+    raw_machines = {}
+    for p in candidates:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    raw_machines = data.get("machines", {})
+                    if raw_machines:
+                        break
+            except Exception:
+                pass
+
+    if not raw_machines and fleet_scan and hasattr(fleet_scan, "scan_infrastructure_devices"):
+        try:
+            raw_machines = fleet_scan.scan_infrastructure_devices()
+        except Exception:
+            pass
+
+    devices_list = []
+    for name, d in raw_machines.items():
+        dev = dict(d)
+        dev["name"] = name
+        devices_list.append(dev)
+
+    # Sort: online first, then by name
+    devices_list.sort(key=lambda x: (not x.get("online", False), x.get("name", "")))
+    return devices_list
 
 
 # --- REST API ENDPOINTS ---
@@ -593,6 +635,41 @@ async def api_fleet_backup(request: Request):
     return {"success": True, "message": "Hot-backup initiated."}
 
 
+@app.get("/api/fleet/devices")
+def api_fleet_devices(request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    devices = load_fleet_devices()
+    return {
+        "success": True,
+        "count": len(devices),
+        "online_count": sum(1 for d in devices if d.get("online")),
+        "devices": devices,
+        "timestamp": time.time()
+    }
+
+
+@app.post("/api/fleet/sync")
+def api_fleet_sync(request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if fleet_scan and hasattr(fleet_scan, "scan_infrastructure_devices"):
+        try:
+            fleet_scan.scan_infrastructure_devices()
+        except Exception:
+            pass
+    else:
+        subprocess.run(["python3", os.path.join(FLEET_DIR, "bin", "fleet-scan.py")], stderr=subprocess.DEVNULL)
+    devices = load_fleet_devices()
+    return {
+        "success": True,
+        "message": "Swarm fleet devices synchronized.",
+        "count": len(devices),
+        "online_count": sum(1 for d in devices if d.get("online")),
+        "devices": devices
+    }
+
+
 # --- WEBSOCKET FEEDS ---
 
 def is_ws_authenticated(websocket: WebSocket) -> bool:
@@ -633,9 +710,11 @@ async def ws_metrics(websocket: WebSocket):
         while True:
             metrics = collect_metrics()
             agents = list_swarm_agents()
+            devices = load_fleet_devices()
             payload = {
                 "metrics": metrics,
-                "agents": agents
+                "agents": agents,
+                "devices": devices
             }
             await websocket.send_json(payload)
             await asyncio.sleep(1.5)
@@ -773,6 +852,204 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
     /* Terminal Output */
     .terminal-box { background: #040608; border: 1px solid #1f242c; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 0.78rem; height: 350px; overflow-y: scroll; color: #58a6ff; }
+
+    /* Device Controls & Expanding Accordions */
+    .device-controls-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .device-filter-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .filter-chip {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 5px 12px;
+      border-radius: 16px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .filter-chip:hover, .filter-chip.active {
+      background: rgba(88, 166, 255, 0.15);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    #device-search-input {
+      width: 100%;
+      padding: 7px 12px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      color: #fff;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+    #device-search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    
+    .device-accordion-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 32px;
+    }
+
+    details.device-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    details.device-box[open] {
+      border-color: var(--accent);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+    details.device-box summary {
+      padding: 12px 16px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      list-style: none;
+      user-select: none;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: rgba(19, 27, 38, 0.8);
+      transition: background 0.15s ease;
+    }
+    details.device-box summary::-webkit-details-marker {
+      display: none;
+    }
+    details.device-box summary:hover {
+      background: rgba(88, 166, 255, 0.08);
+    }
+    
+    .summary-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      color: #fff;
+      font-size: 0.95rem;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .status-dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .status-dot.offline { background: var(--red); opacity: 0.7; }
+    .status-dot.degraded { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+    .summary-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .summary-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    .chevron-icon {
+      transition: transform 0.2s ease;
+      font-size: 0.8rem;
+      display: inline-block;
+    }
+    details.device-box[open] .chevron-icon {
+      transform: rotate(180deg);
+      color: var(--accent);
+    }
+
+    /* Expanded Drawer Content */
+    .device-drawer {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      background: #0d131d;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .drawer-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .drawer-card-head {
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding-bottom: 6px;
+    }
+    .drawer-field {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      gap: 8px;
+    }
+    .drawer-field .k { color: var(--text-muted); }
+    .drawer-field .v { font-weight: 500; color: #fff; text-align: right; word-break: break-all; }
+    
+    .progress-bar-bg {
+      background: #21262d;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+    }
+    .key-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: rgba(63, 185, 80, 0.1);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+      color: var(--green);
+    }
+    .cron-chip {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 8px;
+      background: #090d13;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 0.74rem;
+    }
   </style>
 </head>
 <body>
@@ -812,8 +1089,47 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <div class="val" id="metric-venice">-- ms</div>
     </div>
     <div class="metric-card">
+      <div class="label">Swarm Nodes</div>
+      <div class="val" id="metric-nodes">-- Nodes</div>
+    </div>
+    <div class="metric-card">
       <div class="label">Swarm Health</div>
       <div class="val" id="metric-health" style="color:var(--green);">100% 🟢</div>
+    </div>
+  </div>
+
+  <!-- Swarm Fleet Nodes & Capabilities Section -->
+  <div class="section-head" style="margin-top: 10px;">
+    <h2>
+      <span>🌐 Swarm Fleet Nodes & Capabilities (<span id="device-count">0</span>)</span>
+      <span class="badge badge-green" id="device-online-badge">0 Online</span>
+    </h2>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <button class="btn btn-purple" onclick="triggerDeviceSync(this)">🔄 Sync Fleet Nodes</button>
+      <button class="btn" onclick="toggleAllAccordions(true)">⊞ Expand All</button>
+      <button class="btn" onclick="toggleAllAccordions(false)">⊟ Collapse All</button>
+    </div>
+  </div>
+
+  <!-- Device Filters & Search Bar -->
+  <div class="device-controls-bar">
+    <div class="device-filter-chips">
+      <button class="filter-chip active" onclick="setDeviceFilter('all', this)">All Nodes (<span id="filter-all-count">0</span>)</button>
+      <button class="filter-chip" onclick="setDeviceFilter('online', this)">🟢 Online (<span id="filter-online-count">0</span>)</button>
+      <button class="filter-chip" onclick="setDeviceFilter('hermes', this)">🤖 Hermes Active</button>
+      <button class="filter-chip" onclick="setDeviceFilter('openclaw', this)">⚡ OpenClaw Active</button>
+      <button class="filter-chip" onclick="setDeviceFilter('a2a', this)">🟣 A2A Nodes</button>
+      <button class="filter-chip" onclick="setDeviceFilter('offline', this)">🔴 Offline</button>
+    </div>
+    <div style="flex:1; min-width:220px; max-width:380px;">
+      <input type="text" id="device-search-input" placeholder="🔍 Search host, IP, OS, service, key..." oninput="handleDeviceSearch(this.value)">
+    </div>
+  </div>
+
+  <!-- Expanding Accordion Device List -->
+  <div class="device-accordion-list" id="devices-container">
+    <div style="padding:20px; text-align:center; color:var(--text-muted);">
+      Loading swarm fleet devices and capabilities...
     </div>
   </div>
 
@@ -992,6 +1308,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         const hIcon = sc >= 90 ? "🟢" : (sc >= 60 ? "🟡" : "🔴");
         hEl.innerText = `${sc}% ${hIcon}`;
         hEl.style.color = hColor;
+      }
+
+      const mn = document.getElementById("metric-nodes");
+      if (mn && m.device_count !== undefined) {
+        mn.innerText = `${m.device_online_count || 0} / ${m.device_count} Online`;
+      }
+
+      if (data.devices) {
+        renderDevices(data.devices);
       }
 
       const agents = data.agents || [];
@@ -1236,8 +1561,381 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById("logs-modal").style.display = "none";
     }
 
+    // --- SWARM FLEET NODES MANAGEMENT ---
+    let currentDevices = [];
+    let currentFilter = 'all';
+    let currentSearch = '';
+
+    async function fetchDevices() {
+      try {
+        const res = await fetch("/api/fleet/devices", {
+          headers: authHeaders()
+        });
+        if (res.ok) {
+          const data = await res.json();
+          renderDevices(data.devices || []);
+        }
+      } catch (e) {
+        console.error("Failed to fetch devices:", e);
+      }
+    }
+
+    async function triggerDeviceSync(btn) {
+      if (btn) {
+        btn.innerText = "⏳ Syncing...";
+        btn.disabled = true;
+      }
+      try {
+        const res = await fetch("/api/fleet/sync", {
+          method: "POST",
+          headers: authHeaders()
+        });
+        const data = await res.json();
+        renderDevices(data.devices || []);
+      } catch (e) {
+        alert("Failed to sync fleet nodes: " + e);
+      } finally {
+        if (btn) {
+          btn.innerText = "🔄 Sync Fleet Nodes";
+          btn.disabled = false;
+        }
+      }
+    }
+
+    function toggleAllAccordions(shouldOpen) {
+      const details = document.querySelectorAll("#devices-container details.device-box");
+      details.forEach(d => {
+        d.open = shouldOpen;
+      });
+    }
+
+    function setDeviceFilter(filter, btn) {
+      currentFilter = filter;
+      document.querySelectorAll(".device-filter-chips .filter-chip").forEach(b => b.classList.remove("active"));
+      if (btn) btn.classList.add("active");
+      applyDeviceFilters();
+    }
+
+    function handleDeviceSearch(query) {
+      currentSearch = (query || "").toLowerCase().trim();
+      applyDeviceFilters();
+    }
+
+    function applyDeviceFilters() {
+      const boxes = document.querySelectorAll("#devices-container details.device-box");
+      boxes.forEach(box => {
+        const name = box.getAttribute("data-name") || "";
+        const ip = box.getAttribute("data-ip") || "";
+        const os = box.getAttribute("data-os") || "";
+        const online = box.getAttribute("data-online") === "true";
+        const hasHermes = box.getAttribute("data-hermes") === "true";
+        const hasOpenclaw = box.getAttribute("data-openclaw") === "true";
+        const hasA2A = box.getAttribute("data-a2a") === "true";
+        const haystack = box.getAttribute("data-haystack") || "";
+
+        let matchFilter = true;
+        if (currentFilter === "online") matchFilter = online;
+        else if (currentFilter === "offline") matchFilter = !online;
+        else if (currentFilter === "hermes") matchFilter = hasHermes;
+        else if (currentFilter === "openclaw") matchFilter = hasOpenclaw;
+        else if (currentFilter === "a2a") matchFilter = hasA2A;
+
+        let matchSearch = true;
+        if (currentSearch) {
+          matchSearch = name.includes(currentSearch) || ip.includes(currentSearch) || os.includes(currentSearch) || haystack.includes(currentSearch);
+        }
+
+        box.style.display = (matchFilter && matchSearch) ? "block" : "none";
+      });
+    }
+
+    function renderDevices(devices) {
+      if (!devices || !Array.isArray(devices)) return;
+      currentDevices = devices;
+
+      const openNames = new Set();
+      document.querySelectorAll("#devices-container details.device-box[open]").forEach(d => {
+        const n = d.getAttribute("data-name");
+        if (n) openNames.add(n);
+      });
+
+      const container = document.getElementById("devices-container");
+      container.innerHTML = "";
+
+      const onlineCount = devices.filter(d => d.online).length;
+      document.getElementById("device-count").innerText = devices.length;
+      const onBadge = document.getElementById("device-online-badge");
+      if (onBadge) onBadge.innerText = `${onlineCount} Online`;
+      const faCount = document.getElementById("filter-all-count");
+      if (faCount) faCount.innerText = devices.length;
+      const foCount = document.getElementById("filter-online-count");
+      if (foCount) foCount.innerText = onlineCount;
+
+      devices.forEach(d => {
+        const name = d.name || "unknown";
+        const ip = d.ip || "no-ip";
+        const os = d.os || "Linux";
+        const online = !!d.online;
+
+        const sw = d.trackedSoftware || {};
+        const hermes = sw.hermes || {};
+        const openclaw = sw.openclaw || {};
+        const a2a = sw["a2a-server"] || sw.a2a || {};
+        const antigravity = sw.antigravity || {};
+
+        const hasHermes = !!hermes.running;
+        const hasOpenclaw = !!openclaw.running;
+        const hasA2A = !!a2a.running || (d.services && d.services["a2a-server"] && d.services["a2a-server"].running);
+
+        const haystack = `${name} ${ip} ${os} ${d.kernel || ''} ${d.notes || ''} ${Object.keys(d.apiKeys || {}).join(' ')} ${Object.keys(d.services || {}).join(' ')}`.toLowerCase();
+
+        const box = document.createElement("details");
+        box.className = "device-box";
+        box.setAttribute("data-name", name.toLowerCase());
+        box.setAttribute("data-ip", ip.toLowerCase());
+        box.setAttribute("data-os", os.toLowerCase());
+        box.setAttribute("data-online", online ? "true" : "false");
+        box.setAttribute("data-hermes", hasHermes ? "true" : "false");
+        box.setAttribute("data-openclaw", hasOpenclaw ? "true" : "false");
+        box.setAttribute("data-a2a", hasA2A ? "true" : "false");
+        box.setAttribute("data-haystack", haystack);
+
+        if (openNames.has(name.toLowerCase())) {
+          box.open = true;
+        }
+
+        let statusDotClass = online ? "online" : "offline";
+        let statusText = online ? "ONLINE" : "OFFLINE";
+
+        let hermesPill = hasHermes
+          ? `<span class="badge badge-green">🟢 Hermes ${hermes.version || ''} (${hermes.model || 'kimi-k3'})</span>`
+          : `<span class="badge" style="background:#21262d; color:#8b949e;">⚪ No Hermes</span>`;
+
+        let openclawPill = hasOpenclaw
+          ? `<span class="badge badge-cyan">⚡ OpenClaw ${openclaw.version || ''}</span>`
+          : (openclaw.version ? `<span class="badge" style="background:#21262d; color:#8b949e;">⚪ OpenClaw (Stopped)</span>` : '');
+
+        let a2aPill = hasA2A
+          ? `<span class="badge badge-purple">🟣 A2A Node :${a2a.port || 8080}</span>`
+          : '';
+
+        let antigravityPill = (antigravity.running || antigravity.session)
+          ? `<span class="badge badge-yellow">✨ AGY: ${antigravity.session ? antigravity.session.substring(0,8)+'...' : 'Active'}</span>`
+          : '';
+
+        let diskChip = '';
+        if (d.disk && d.disk.total) {
+          diskChip = `<span style="font-size:0.75rem; color:var(--text-muted); margin-left:4px;">💾 ${d.disk.used || '0'}/${d.disk.total} (${d.disk.usePct || 0}%)</span>`;
+        }
+
+        const diskPct = (d.disk && d.disk.usePct) ? Math.min(100, Math.max(0, d.disk.usePct)) : 0;
+        const memStr = (d.memory && typeof d.memory === 'object') ? `${d.memory.free || ''} free / ${d.memory.total || ''}` : (d.memory || 'N/A');
+        const sshStr = d.sshAccess ? '<span style="color:var(--green); font-weight:600;">✅ Verified Access</span>' : (d.sshBlocker ? `<span style="color:var(--yellow);">${d.sshBlocker}</span>` : '<span style="color:var(--text-muted);">None</span>');
+
+        const hVer = hermes.version ? `${hermes.version} (${hermes.running ? 'Running' : 'Stopped'})` : 'Not Installed';
+        const ocVer = openclaw.version ? `${openclaw.version} (${openclaw.running ? 'Running' : 'Stopped'}${openclaw.latestAvailable ? ', Update: ' + openclaw.latestAvailable : ''})` : 'Not Installed';
+        const a2aPort = a2a.port ? `Port ${a2a.port} (${a2a.running ? 'Listening' : 'Stopped'})` : 'Inactive';
+        const a2aCard = a2a.agentCardUrl ? `<a href="${a2a.agentCardUrl}" target="_blank" style="color:var(--accent); text-decoration:none;">View Agent Card ↗</a>` : 'N/A';
+
+        let servicesHtml = '';
+        const svcs = d.services || {};
+        if (Object.keys(svcs).length > 0) {
+          for (const [sname, sinfo] of Object.entries(svcs)) {
+            const sRunning = (sinfo && sinfo.running !== undefined) ? sinfo.running : true;
+            const sPort = (sinfo && sinfo.port) ? ` :${sinfo.port}` : '';
+            const sHealth = (sinfo && sinfo.health) ? ` [${sinfo.health}]` : '';
+            servicesHtml += `
+              <div class="drawer-field">
+                <span class="k">${sname}${sPort}:</span>
+                <span class="v">${sRunning ? '🟢 Running' : '🔴 Stopped'}${sHealth}</span>
+              </div>
+            `;
+          }
+        } else {
+          servicesHtml = '<div style="color:var(--text-muted); font-size:0.75rem;">No active services reported</div>';
+        }
+
+        let keysHtml = '';
+        const keys = d.apiKeys || {};
+        if (Object.keys(keys).length > 0) {
+          keysHtml = '<div style="display:flex; flex-wrap:wrap; gap:6px;">';
+          for (const [kname, kinfo] of Object.entries(keys)) {
+            const isValid = kinfo.valid || kinfo.set;
+            keysHtml += `
+              <span class="key-badge" title="${kinfo.service || kname}">
+                🛡️ ${kname.replace('MCBORED_', '').replace('MCOVERSEER_', '')}: ${isValid ? 'SET' : 'MISSING'}
+              </span>
+            `;
+          }
+          keysHtml += '</div>';
+        } else {
+          keysHtml = '<div style="color:var(--text-muted); font-size:0.75rem;">No API key bindings detected</div>';
+        }
+
+        let cronHtml = '';
+        const crons = d.cronJobs || [];
+        if (crons.length > 0) {
+          crons.forEach(cj => {
+            const st = cj.status === 'ok' ? '🟢' : '⚠️';
+            cronHtml += `
+              <div class="cron-chip">
+                <span><strong>${cj.name}</strong> (${cj.schedule || 'scheduled'})</span>
+                <span>${st} ${cj.status || 'active'}</span>
+              </div>
+            `;
+          });
+        } else {
+          cronHtml = '<div style="color:var(--text-muted); font-size:0.75rem;">No scheduled cron jobs</div>';
+        }
+
+        const notesStr = d.notes || 'Normal telemetry.';
+        const scannedAt = d.lastScanned || d.lastSeen || 'Recent';
+
+        box.innerHTML = `
+          <summary>
+            <div class="summary-left">
+              <span class="status-dot ${statusDotClass}"></span>
+              <span>${name}</span>
+              <span style="font-family:monospace; font-size:0.8rem; color:var(--accent);">${ip}</span>
+              <span class="badge badge-cyan">${os}</span>
+            </div>
+            <div class="summary-pills">
+              ${hermesPill}
+              ${openclawPill}
+              ${a2aPill}
+              ${antigravityPill}
+              ${diskChip}
+            </div>
+            <div class="summary-right">
+              <span class="chevron-icon">▼</span>
+            </div>
+          </summary>
+          <div class="device-drawer">
+            <!-- Box 1: System Specs -->
+            <div class="drawer-card">
+              <div class="drawer-card-head">
+                <span>💻 System & Host Specs</span>
+                <span class="badge ${online ? 'badge-green' : 'badge-red'}">${statusText}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">OS / Kernel:</span>
+                <span class="v">${os} / ${d.kernel || 'N/A'}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">Architecture / Uptime:</span>
+                <span class="v">${d.arch || 'x86_64'} / ${d.uptime || 'N/A'}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">SSH Security:</span>
+                <span class="v">${sshStr}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">Memory:</span>
+                <span class="v">${memStr}</span>
+              </div>
+              ${d.disk ? `
+              <div style="margin-top:4px;">
+                <div class="drawer-field">
+                  <span class="k">Disk Space:</span>
+                  <span class="v">${d.disk.used || '0'} / ${d.disk.total || '0'} (${diskPct}%)</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill" style="width: ${diskPct}%;"></div>
+                </div>
+              </div>` : ''}
+            </div>
+
+            <!-- Box 2: AI & Agent Runtimes -->
+            <div class="drawer-card">
+              <div class="drawer-card-head">
+                <span>🤖 AI & Agent Runtimes</span>
+                <span class="badge badge-purple">${hasA2A ? 'A2A Peer' : 'Client'}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">Hermes Agent:</span>
+                <span class="v">${hVer}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">Active Model:</span>
+                <span class="v">${hermes.model || 'kimi-k3'}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">OpenClaw:</span>
+                <span class="v">${ocVer}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">A2A Server:</span>
+                <span class="v">${a2aPort}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="k">Agent Card:</span>
+                <span class="v">${a2aCard}</span>
+              </div>
+              ${antigravity.session ? `
+              <div class="drawer-field">
+                <span class="k">Antigravity Session:</span>
+                <span class="v" style="color:var(--yellow);">${antigravity.session}</span>
+              </div>` : ''}
+            </div>
+
+            <!-- Box 3: Services & Ports -->
+            <div class="drawer-card">
+              <div class="drawer-card-head">
+                <span>🔌 Active Services & Ports</span>
+                <span class="badge badge-cyan">${Object.keys(svcs).length} Services</span>
+              </div>
+              ${servicesHtml}
+            </div>
+
+            <!-- Box 4: Configured API Keys -->
+            <div class="drawer-card">
+              <div class="drawer-card-head">
+                <span>🔑 Integrations & Keys</span>
+                <span class="badge badge-green">${Object.keys(keys).length} Configured</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">
+                Verified zero-leak credential presence:
+              </div>
+              ${keysHtml}
+            </div>
+
+            <!-- Box 5: Cron & Automation -->
+            <div class="drawer-card">
+              <div class="drawer-card-head">
+                <span>⏰ Automated Timers & Cron</span>
+                <span class="badge badge-yellow">${crons.length} Jobs</span>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                ${cronHtml}
+              </div>
+            </div>
+
+            <!-- Box 6: Diagnostics & Notes -->
+            <div class="drawer-card">
+              <div class="drawer-card-head">
+                <span>📋 Diagnostics & Telemetry</span>
+                <span style="font-size:0.72rem; color:var(--text-muted);">${scannedAt}</span>
+              </div>
+              <p style="font-size:0.8rem; line-height:1.4; color:#fff;">
+                ${notesStr}
+              </p>
+              ${(d.pendingUpdates && d.pendingUpdates.length > 0) ? `
+              <div style="margin-top:6px; padding:6px; background:rgba(210,153,34,0.1); border:1px solid rgba(210,153,34,0.3); border-radius:4px; font-size:0.75rem; color:var(--yellow);">
+                ⚠️ <strong>Pending Updates:</strong> ${d.pendingUpdates.join(', ')}
+              </div>` : ''}
+            </div>
+          </div>
+        `;
+
+        container.appendChild(box);
+      });
+
+      applyDeviceFilters();
+    }
+
     // Initialize
     window.onload = function() {
+      fetchDevices();
       connectMetrics();
     };
   </script>

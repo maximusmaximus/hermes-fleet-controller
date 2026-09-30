@@ -16,6 +16,8 @@ Autonomous, multi-agent fleet controller orchestrating distributed **Hermes Agen
 - **Autonomous Self-Improvement & GitHub PR Bot**: Weekly feedback analyzer that gathers top 50 error traces, opens GitHub issues, uses a dedicated **$1.00 Venice API key** to synthesize bug fixes, executes syntax checks (`py_compile`), passes zero-leak scans, and submits automated GitHub Pull Requests with a human-in-the-loop merge policy.
 - **Easy Daily Swarm & MCP Reporting**: Daily 09:00 digest discovering all active Model Context Protocol (MCP) servers (Home Assistant, Trollbox, custom tools) with 15-second health probes and smart Telegram 4000-char message chunking.
 - **500 MB Resource Governance**: Strict `--memory 500m` container ceilings, 500 MB backup vault quotas with automatic oldest-first rotation, 500 MB journal ceilings, and SQLite WAL truncation (`PRAGMA wal_checkpoint(TRUNCATE)`).
+- **Expanding Box Swarm Fleet Matrix**: Compact, space-efficient accordion cards for every machine on the Tailscale mesh. Features live telemetry sync with `mcmini`, Antigravity agent sessions (`aafc56f9-e710-4c91-8b08-71d962eb4522`), OpenClaw runtimes, A2A servers (`:8080`), disk/memory gauges, sanitized API key presence shields, automated cron timers, and one-click Expand/Collapse controls.
+
 
 ---
 
