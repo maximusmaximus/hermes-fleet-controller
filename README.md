@@ -196,6 +196,70 @@ fleet-firewall ha-agent status
 
 ---
 
+## Swarm Mesh Discovery, Deep-Polling & Enlistment
+
+Easily add and deep-poll any machine (Windows, Linux, macOS) across your Tailscale A2A network into the Hermes Swarm Manager.
+
+### Standardized Antigravity Discovery & Enlistment Prompt
+Paste this prompt into Antigravity on any machine connected to your Tailscale mesh:
+
+```markdown
+Execute this Antigravity Swarm Discovery & Deep-Poll Enlistment on this machine:
+
+1. Inspect system environment:
+   - OS, kernel, CPU, RAM (total/free), and disk space (total/used/avail).
+   - Tailscale IP and connection status via `tailscale status --json` or `tailscale ip -4`.
+
+2. Inspect AI & Agent Runtimes:
+   - Check running Hermes agents (`hermes --version`, `podman ps` / `docker ps`).
+   - Check OpenClaw runtimes (ports 18789 / 18790).
+   - Check local Antigravity IDE version and active session ID.
+   - Check A2A server on port 8080 (http://localhost:8080/.well-known/agent-card.json). If inactive, start it with Bearer token auth.
+
+3. Enlist with Hermes Fleet Controller:
+   - Run the onboard probe script:
+     python bin/fleet-enroll-node.py --hub http://100.99.202.75:8650
+   - Or submit HTTP POST to http://100.99.202.75:8650/api/fleet/register with your telemetry payload.
+
+4. Report discovered runtimes and registration confirmation back to operator.
+```
+
+### Turnkey Enlistment CLI Probe
+Run the standalone cross-platform probe on any node with zero external dependencies:
+
+```bash
+# Deep-poll local node and register with the Swarm Hub
+python bin/fleet-enroll-node.py --hub http://100.99.202.75:8650
+
+# Dry-run inspection without transmitting telemetry
+python bin/fleet-enroll-node.py --dry-run
+```
+
+---
+
+## Direct 1-Click Agent & Node Communication
+
+- **Click-to-Prompt**: Click directly on any agent or device title in the Web Dashboard (e.g. `💬 hermes-agent-low` or `mcmini`) to open an interactive direct conversation modal.
+- **Quick Preset Chips**: Execute instant one-click probes:
+  - `⚡ Ping Health`: Tests latency, operational status, and active model.
+  - `📊 System Telemetry`: Queries load, CPU, RAM, and uptime.
+  - `🐳 List Containers`: Audits running Podman/Docker containers and processes.
+  - `🔍 Inspect Capabilities`: Retrieves active A2A agent card tools and skills.
+- **Live Markdown & Latency Gauges**: View real-time response rendering and latency benchmarks (e.g., `⚡ 245ms`).
+
+---
+
+## Multi-Agent Swarm Broadcast Console
+
+Select multiple agents and Tailscale nodes simultaneously to dispatch collective instructions:
+
+1. **Multi-Select Checkboxes**: Check the box on any agent card or device accordion.
+2. **Floating Bottom Console**: Shows live selection count with target chips, `[📢 Swarm Broadcast]`, and `[☑️ Select Online]`.
+3. **Concurrent Swarm Dispatch**: Prompts are dispatched asynchronously across all targets via `POST /api/fleet/broadcast` using non-blocking coroutines.
+4. **Side-by-Side Results Feed**: Each target's response card is displayed in a responsive grid with status badges (🟢 / 🔴) and round-trip execution latency.
+
+---
+
 ## Command Reference
 
 | `fleet-pair` or `/pair` or `/login` | CLI / Telegram | Generates 6-digit zero-trust pairing PIN and dashboard link |

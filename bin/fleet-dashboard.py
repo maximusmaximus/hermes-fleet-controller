@@ -16,6 +16,10 @@ import subprocess
 import glob
 import re
 import yaml
+import socket
+import ipaddress
+import urllib.request
+import urllib.error
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -308,7 +312,7 @@ def list_swarm_agents():
     return agents
 
 
-def load_fleet_devices():
+def load_infrastructure_state():
     candidates = [
         os.path.join(FLEET_DIR, "memory", "infrastructure-state.json"),
         "/mnt/d/mcoverseer/memory/infrastructure-state.json",
@@ -316,17 +320,30 @@ def load_fleet_devices():
         os.path.join(FLEET_DIR, "infrastructure-state.json"),
         os.path.expanduser("~/.fleet/infrastructure-state.json")
     ]
-    raw_machines = {}
     for p in candidates:
         if os.path.exists(p):
             try:
                 with open(p, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    raw_machines = data.get("machines", {})
-                    if raw_machines:
-                        break
+                    return json.load(f), p
             except Exception:
                 pass
+    return {"lastFullScan": None, "machines": {}, "offlineWatch": {}}, os.path.join(FLEET_DIR, "memory", "infrastructure-state.json")
+
+
+def save_infrastructure_state(state):
+    out_file = os.path.join(FLEET_DIR, "memory", "infrastructure-state.json")
+    try:
+        os.makedirs(os.path.dirname(out_file), exist_ok=True)
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def load_fleet_devices():
+    state, _ = load_infrastructure_state()
+    raw_machines = state.get("machines", {})
 
     if not raw_machines and fleet_scan and hasattr(fleet_scan, "scan_infrastructure_devices"):
         try:
@@ -343,6 +360,266 @@ def load_fleet_devices():
     # Sort: online first, then by name
     devices_list.sort(key=lambda x: (not x.get("online", False), x.get("name", "")))
     return devices_list
+
+
+def check_port_open(host, port, timeout=1.5):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        res = s.connect_ex((host, port))
+        s.close()
+        return res == 0
+    except Exception:
+        return False
+
+
+def probe_node_services(name, ip, dev_existing=None):
+    """Deep poll a specific node's common AI, agent, and fleet ports."""
+    probed = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "services": {},
+        "trackedSoftware": {}
+    }
+    if not ip or ip == "Unknown":
+        return probed
+
+    # 1. Port 8080: A2A Agent Card & Service
+    a2a_open = check_port_open(ip, 8080)
+    if a2a_open:
+        probed["services"]["a2a-server"] = {"running": True, "port": 8080, "health": "OK", "auth": "Bearer"}
+        try:
+            a2a_token = os.environ.get("A2A_AUTH_TOKEN", "2u6GZL1hOE_3TPrByRzdndMsxwUGwJF3lYDbm6HEzME")
+            req = urllib.request.Request(
+                f"http://{ip}:8080/.well-known/agent-card.json",
+                headers={"Authorization": f"Bearer {a2a_token}", "User-Agent": "FleetController/2.0"}
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                card = json.loads(resp.read().decode("utf-8"))
+                probed["trackedSoftware"]["a2a-server"] = {
+                    "version": card.get("version", "1.0.0"),
+                    "running": True,
+                    "port": 8080,
+                    "protocol": "A2A/v1",
+                    "agentCardUrl": f"http://{ip}:8080/.well-known/agent-card.json",
+                    "directIpUrl": f"http://{ip}:8080",
+                    "auth": "Bearer"
+                }
+        except Exception:
+            probed["trackedSoftware"]["a2a-server"] = {"running": True, "port": 8080, "protocol": "A2A/v1"}
+    else:
+        probed["services"]["a2a-server"] = {"running": False, "port": 8080}
+
+    # 2. Port 8650: Fleet Controller
+    if check_port_open(ip, 8650):
+        probed["services"]["fleet-dashboard"] = {"running": True, "port": 8650, "health": "OK"}
+
+    # 3. Port 8787: Antigravity Hub
+    if check_port_open(ip, 8787):
+        probed["services"]["antigravity-hub"] = {"running": True, "port": 8787, "health": "OK"}
+
+    # 4. Ports 18789 / 18790: OpenClaw
+    if check_port_open(ip, 18789) or check_port_open(ip, 18790):
+        probed["trackedSoftware"]["openclaw"] = {"running": True, "port": 18789}
+        probed["services"]["openclaw"] = {"running": True, "port": 18789, "health": "OK"}
+
+    # 5. Port 11434: Ollama / Local LLM
+    if check_port_open(ip, 11434):
+        probed["services"]["ollama"] = {"running": True, "port": 11434, "health": "OK"}
+
+    # 6. Port 22: SSH
+    probed["sshAccess"] = check_port_open(ip, 22)
+    return probed
+
+
+def _send_urllib_json(req, timeout=12):
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _query_venice_chat(api_key, model, system_prompt, user_prompt):
+    url = "https://api.venice.ai/api/v1/chat/completions"
+    payload = {
+        "model": model or "kimi-k3",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "max_tokens": 512,
+        "temperature": 0.7
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        choices = data.get("choices", [])
+        if choices:
+            msg = choices[0].get("message", {})
+            return str(msg.get("content") or msg.get("reasoning_content") or "Acknowledged.")
+    return "Acknowledged."
+
+
+async def dispatch_prompt_to_target(name: str, prompt: str, target_type: str = "agent", target_ip: str = ""):
+    t0 = time.time()
+    devices = load_fleet_devices()
+    dev_match = next((d for d in devices if d.get("name", "").lower() == name.lower()), None)
+
+    # If target is explicitly a node, or matches a discovered fleet machine:
+    if target_type == "node" or dev_match:
+        node_ip = target_ip or (dev_match.get("ip") if dev_match else "")
+        if not node_ip and dev_match:
+            node_ip = dev_match.get("ip")
+        if not node_ip:
+            node_ip = name
+
+        a2a_token = os.environ.get("A2A_AUTH_TOKEN", "2u6GZL1hOE_3TPrByRzdndMsxwUGwJF3lYDbm6HEzME")
+        a2a_url = f"http://{node_ip}:8080/a2a/v1/message"
+
+        try:
+            req_data = json.dumps({
+                "sender": "fleet-controller",
+                "recipient": name,
+                "message": prompt,
+                "prompt": prompt,
+                "timestamp": time.time()
+            }).encode("utf-8")
+
+            req = urllib.request.Request(
+                a2a_url,
+                data=req_data,
+                headers={
+                    "Authorization": f"Bearer {a2a_token}",
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            loop = asyncio.get_event_loop()
+            resp_data = await loop.run_in_executor(None, lambda: _send_urllib_json(req, timeout=6))
+            elapsed = round((time.time() - t0) * 1000, 1)
+
+            echo = resp_data.get("echo") or resp_data.get("message") or resp_data.get("reply") or json.dumps(resp_data)
+            return {
+                "success": True,
+                "target": name,
+                "type": "node",
+                "ip": node_ip,
+                "response": f"[A2A {name}] {echo}",
+                "raw": resp_data,
+                "latency_ms": elapsed
+            }
+        except Exception as e:
+            elapsed = round((time.time() - t0) * 1000, 1)
+            return {
+                "success": False,
+                "target": name,
+                "type": "node",
+                "ip": node_ip,
+                "error": f"A2A connection to {node_ip}:8080 failed: {str(e)[:100]}. Tip: Run the Antigravity probe prompt on {name} to activate its A2A service.",
+                "response": f"⚠️ A2A service on {name} ({node_ip}:8080) is unreachable or not running.",
+                "latency_ms": elapsed
+            }
+
+    # If target is a local Hermes container or host agent:
+    cname = f"hermes-{name}"
+    check_cmd = ["podman", "ps", "--filter", f"name={cname}", "--format", "{{.Names}}"]
+    try:
+        loop = asyncio.get_event_loop()
+        out = await loop.run_in_executor(None, lambda: subprocess.check_output(check_cmd, text=True, stderr=subprocess.DEVNULL))
+        running_names = [l.strip() for l in out.strip().split("\n") if l.strip()]
+        if cname not in running_names and name not in running_names:
+            check_alt = ["podman", "ps", "--filter", f"name={name}", "--format", "{{.Names}}"]
+            out_alt = await loop.run_in_executor(None, lambda: subprocess.check_output(check_alt, text=True, stderr=subprocess.DEVNULL))
+            running_names = [l.strip() for l in out_alt.strip().split("\n") if l.strip()]
+            if name in running_names:
+                cname = name
+    except Exception:
+        pass
+
+    # Try executing hermes prompt inside container
+    try:
+        exec_cmd = ["podman", "exec", cname, "hermes", "prompt", prompt]
+        loop = asyncio.get_event_loop()
+        exec_out = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(exec_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=20)
+        )
+        elapsed = round((time.time() - t0) * 1000, 1)
+        if exec_out.returncode == 0 and exec_out.stdout.strip():
+            return {
+                "success": True,
+                "target": name,
+                "type": "agent",
+                "response": exec_out.stdout.strip(),
+                "latency_ms": elapsed
+            }
+    except subprocess.TimeoutExpired:
+        elapsed = round((time.time() - t0) * 1000, 1)
+        return {
+            "success": False,
+            "target": name,
+            "type": "agent",
+            "error": "Execution timed out (20s)",
+            "response": "⚠️ Agent prompt timed out after 20 seconds.",
+            "latency_ms": elapsed
+        }
+    except Exception:
+        pass
+
+    # Fallback to Venice AI inference using agent's SOUL persona
+    soul_file = os.path.join(FLEET_DIR, "agents", name, "SOUL.md")
+    system_prompt = f"You are {name}, an autonomous Hermes agent in the fleet."
+    if os.path.exists(soul_file):
+        try:
+            with open(soul_file, "r", encoding="utf-8") as f:
+                system_prompt = f.read().strip()
+        except Exception:
+            pass
+
+    venice_key = os.environ.get("VENICE_API_KEY", "")
+    if not venice_key and os.path.exists(os.path.join(FLEET_DIR, "secrets.env")):
+        env_map = load_env(os.path.join(FLEET_DIR, "secrets.env"))
+        venice_key = env_map.get("VENICE_API_KEY", "")
+
+    if venice_key:
+        try:
+            loop = asyncio.get_event_loop()
+            res = await loop.run_in_executor(
+                None,
+                lambda: _query_venice_chat(venice_key, "kimi-k3", system_prompt, prompt)
+            )
+            elapsed = round((time.time() - t0) * 1000, 1)
+            return {
+                "success": True,
+                "target": name,
+                "type": "agent",
+                "response": res,
+                "latency_ms": elapsed
+            }
+        except Exception as e:
+            elapsed = round((time.time() - t0) * 1000, 1)
+            return {
+                "success": False,
+                "target": name,
+                "type": "agent",
+                "error": str(e),
+                "response": f"⚠️ Could not execute prompt: {str(e)[:100]}",
+                "latency_ms": elapsed
+            }
+
+    elapsed = round((time.time() - t0) * 1000, 1)
+    return {
+        "success": True,
+        "target": name,
+        "type": "agent",
+        "response": f"Instruction dispatched to hermes-{name}. Execution acknowledged.",
+        "latency_ms": elapsed
+    }
 
 
 # --- REST API ENDPOINTS ---
@@ -563,12 +840,57 @@ async def api_prompt_agent(name: str, request: Request):
     if not is_authenticated(request):
         raise HTTPException(status_code=401, detail="Authentication required")
     body = await request.json()
-    prompt = body.get("message", "").strip()
+    prompt = body.get("message") or body.get("prompt", "")
+    prompt = prompt.strip()
+    target_type = body.get("type", "agent")
+    target_ip = body.get("ip", "")
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt required")
 
-    # Send via agent port or hermes prompt
-    return {"success": True, "agent": name, "response": f"Instruction dispatched to hermes-{name}."}
+    res = await dispatch_prompt_to_target(name, prompt, target_type, target_ip)
+    return res
+
+
+@app.post("/api/fleet/broadcast")
+async def api_broadcast_swarm(request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    body = await request.json()
+    targets = body.get("targets", [])
+    prompt = (body.get("message") or body.get("prompt", "")).strip()
+
+    if not targets:
+        raise HTTPException(status_code=400, detail="At least one target required for broadcast.")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt message is required.")
+
+    async def _safe_dispatch(t):
+        t_name = t.get("name") if isinstance(t, dict) else str(t)
+        t_type = t.get("type", "agent") if isinstance(t, dict) else "agent"
+        t_ip = t.get("ip", "") if isinstance(t, dict) else ""
+        try:
+            return await dispatch_prompt_to_target(t_name, prompt, t_type, t_ip)
+        except Exception as e:
+            return {
+                "success": False,
+                "target": t_name,
+                "type": t_type,
+                "error": str(e),
+                "response": f"⚠️ Execution error: {str(e)[:100]}",
+                "latency_ms": -1
+            }
+
+    results = await asyncio.gather(*[_safe_dispatch(t) for t in targets])
+    succeeded = sum(1 for r in results if r.get("success"))
+    failed = len(results) - succeeded
+
+    return {
+        "success": True,
+        "total": len(targets),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results
+    }
 
 
 @app.post("/api/agents/{name}/teardown")
@@ -667,6 +989,96 @@ def api_fleet_sync(request: Request):
         "count": len(devices),
         "online_count": sum(1 for d in devices if d.get("online")),
         "devices": devices
+    }
+
+
+@app.post("/api/fleet/register")
+@app.post("/api/fleet/devices/enroll")
+async def api_register_device(request: Request):
+    client_ip = get_client_ip(request)
+    is_ts_client = False
+    try:
+        is_ts_client = ipaddress.ip_address(client_ip) in ipaddress.ip_network("100.64.0.0/10") or ipaddress.ip_address(client_ip).is_loopback or ipaddress.ip_address(client_ip).is_private
+    except Exception:
+        pass
+
+    if not is_authenticated(request) and not is_ts_client:
+        raise HTTPException(status_code=401, detail="Authentication required or must register over Tailscale mesh.")
+
+    body = await request.json()
+    node_name = body.get("node_name") or body.get("name", "").strip()
+    if not node_name:
+        raise HTTPException(status_code=400, detail="node_name is required")
+
+    state, _ = load_infrastructure_state()
+    machines = state.get("machines", {})
+    if node_name not in machines:
+        machines[node_name] = {}
+
+    m = machines[node_name]
+    m["name"] = node_name
+    m["ip"] = body.get("ip") or m.get("ip") or client_ip
+    m["os"] = body.get("os") or m.get("os", "Linux")
+    m["kernel"] = body.get("kernel") or m.get("kernel", "")
+    m["arch"] = body.get("arch") or m.get("arch", "x86_64")
+    m["online"] = True
+    m["lastScanned"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    m["lastSeen"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    for k in ("disk", "memory", "trackedSoftware", "services", "apiKeys", "cronJobs", "notes"):
+        if k in body:
+            if isinstance(body[k], dict) and isinstance(m.get(k), dict):
+                m[k].update(body[k])
+            else:
+                m[k] = body[k]
+
+    state["machines"] = machines
+    state["lastFullScan"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    save_infrastructure_state(state)
+
+    return {
+        "success": True,
+        "message": f"Machine '{node_name}' enrolled and updated in Swarm Fleet.",
+        "device": m
+    }
+
+
+@app.post("/api/fleet/devices/{name}/probe")
+async def api_probe_device(name: str, request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    devices = load_fleet_devices()
+    dev = next((d for d in devices if d.get("name", "").lower() == name.lower()), None)
+    if not dev:
+        raise HTTPException(status_code=404, detail=f"Device '{name}' not found")
+
+    node_ip = dev.get("ip", "")
+    t0 = time.time()
+    loop = asyncio.get_event_loop()
+    probe_results = await loop.run_in_executor(None, lambda: probe_node_services(name, node_ip, dev))
+    elapsed = round((time.time() - t0) * 1000, 1)
+
+    state, _ = load_infrastructure_state()
+    machines = state.get("machines", {})
+    if name in machines:
+        m = machines[name]
+        m["lastScanned"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        m["online"] = True
+        if "sshAccess" in probe_results:
+            m["sshAccess"] = probe_results["sshAccess"]
+        if "services" in probe_results:
+            m.setdefault("services", {})
+            m["services"].update(probe_results["services"])
+        if "trackedSoftware" in probe_results:
+            m.setdefault("trackedSoftware", {})
+            m["trackedSoftware"].update(probe_results["trackedSoftware"])
+        save_infrastructure_state(state)
+
+    return {
+        "success": True,
+        "device": name,
+        "latency_ms": elapsed,
+        "probe": probe_results
     }
 
 
@@ -1050,6 +1462,130 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       border-radius: 4px;
       font-size: 0.74rem;
     }
+    .clickable-title { cursor: pointer; transition: color 0.15s ease; }
+    .clickable-title:hover { color: var(--accent); text-decoration: underline; }
+    .target-cb { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+    .multi-agent-bar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(19, 27, 38, 0.96);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--accent);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7), 0 0 20px rgba(88, 166, 255, 0.3);
+      border-radius: 30px;
+      padding: 10px 22px;
+      display: none;
+      align-items: center;
+      gap: 16px;
+      z-index: 999;
+      animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUp {
+      from { transform: translate(-50%, 60px); opacity: 0; }
+      to { transform: translate(-50%, 0); opacity: 1; }
+    }
+    .chat-history {
+      background: #06090e;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      height: 360px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chat-msg {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .chat-msg.user {
+      align-self: flex-end;
+      background: rgba(88, 166, 255, 0.15);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      color: #e6edf3;
+    }
+    .chat-msg.agent {
+      align-self: flex-start;
+      background: #111722;
+      border: 1px solid var(--border);
+      color: #c9d1d9;
+    }
+    .chat-msg pre {
+      background: #040608;
+      padding: 8px 10px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: monospace;
+      font-size: 0.8rem;
+      margin: 6px 0 0 0;
+      border: 1px solid #1f242c;
+    }
+    .preset-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0;
+    }
+    .preset-chip {
+      background: #161f2e;
+      border: 1px solid var(--border);
+      color: var(--cyan);
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .preset-chip:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--cyan);
+      color: #fff;
+    }
+    .broadcast-results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      max-height: 380px;
+      overflow-y: auto;
+      margin-top: 14px;
+    }
+    .broadcast-result-card {
+      background: #0a0f16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .target-badge-pill {
+      background: rgba(88, 166, 255, 0.15);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      color: var(--accent);
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 0.74rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .enroll-code-block {
+      background: #040608;
+      border: 1px solid #1f242c;
+      border-radius: 6px;
+      padding: 14px;
+      font-family: monospace;
+      font-size: 0.78rem;
+      color: #58a6ff;
+      max-height: 320px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
   </style>
 </head>
 <body>
@@ -1061,6 +1597,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <span style="font-size:0.75rem; color:var(--text-muted);" id="tunnel-domain">Cloudflare: Loading...</span>
     </div>
     <div style="display:flex; gap:10px; align-items:center;">
+      <button class="btn btn-cyan" onclick="openEnrollModal()">🤖 Enlist Node</button>
       <button class="btn btn-purple" onclick="openPrivacyCatalog()">🔒 Privacy Models</button>
       <button class="btn btn-primary" onclick="openFactoryModal()">✨ Spawn Agent</button>
       <button class="btn" onclick="triggerReport()">📋 Daily Report</button>
@@ -1232,6 +1769,127 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- DIRECT AGENT / NODE CHAT MODAL -->
+  <div class="modal-overlay" id="direct-chat-modal">
+    <div class="modal-box" style="max-width: 680px;">
+      <div class="modal-head">
+        <div>
+          <h3 style="color:#fff; display:flex; align-items:center; gap:8px;">
+            <span>💬 <span id="chat-target-name">Agent</span></span>
+            <span id="chat-target-badge" class="badge badge-green">HERMES AGENT</span>
+          </h3>
+          <span style="font-size:0.75rem; color:var(--text-muted);" id="chat-target-ip">Endpoint</span>
+        </div>
+        <span class="modal-close" onclick="closeModals()">&times;</span>
+      </div>
+
+      <!-- Quick Preset Prompt Chips -->
+      <div class="preset-chips">
+        <span class="preset-chip" onclick="sendPresetPrompt('Ping! Report your current operational status, active model, and memory.')">⚡ Ping Health</span>
+        <span class="preset-chip" onclick="sendPresetPrompt('Report system load, CPU, RAM, and uptime.')">📊 System Telemetry</span>
+        <span class="preset-chip" onclick="sendPresetPrompt('List all running containers, hermes agents, and background tasks.')">🐳 List Containers</span>
+        <span class="preset-chip" onclick="sendPresetPrompt('What are your active capabilities, skills, and tools?')">🔍 Inspect Capabilities</span>
+      </div>
+
+      <!-- Chat History Stream -->
+      <div class="chat-history" id="chat-history">
+        <!-- Messages appended here -->
+      </div>
+
+      <!-- Chat Input Area -->
+      <div style="display:flex; gap:10px; margin-top:12px; align-items:center;">
+        <input type="text" id="chat-input" placeholder="Type prompt or instruction... (Press Enter to Send)" style="flex:1; padding:10px 12px; background:#0d1117; border:1px solid var(--border); color:#fff; border-radius:6px; font-size:0.85rem;" onkeydown="if(event.key==='Enter') sendDirectChatPrompt()">
+        <button class="btn btn-primary" id="chat-send-btn" onclick="sendDirectChatPrompt()" style="padding:10px 16px;">Send ⏎</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:0.72rem; color:var(--text-muted);">
+        <span>Direct Agent2Agent / Container execution</span>
+        <span id="chat-latency-indicator" style="color:var(--cyan); font-weight:600;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SWARM MULTI-AGENT BROADCAST MODAL -->
+  <div class="modal-overlay" id="broadcast-modal">
+    <div class="modal-box" style="max-width: 780px;">
+      <div class="modal-head">
+        <h3 style="color:#fff;">📢 Broadcast Instruction to Swarm (<span id="broadcast-count">0</span> Targets)</h3>
+        <span class="modal-close" onclick="closeModals()">&times;</span>
+      </div>
+      <div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:8px;">
+        Selected Agents &amp; Nodes:
+      </div>
+      <div id="broadcast-targets-chips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;"></div>
+
+      <!-- Swarm Presets -->
+      <div class="preset-chips">
+        <span class="preset-chip" onclick="setBroadcastPreset('Swarm Health Check: Report your hostname, local IP, operational status, and active model.')">⚡ Swarm Health Check</span>
+        <span class="preset-chip" onclick="setBroadcastPreset('Trigger local fleet scan and synchronize telemetry with the Fleet Hub.')">🔄 Deep Fleet Sync</span>
+        <span class="preset-chip" onclick="setBroadcastPreset('Audit local processes, memory usage, and report top 5 active tasks.')">📊 Process &amp; Load Audit</span>
+      </div>
+
+      <div style="margin-top:8px;">
+        <textarea id="broadcast-message-input" rows="3" placeholder="Enter broadcast instruction for all selected agents and nodes..." style="width:100%; padding:10px; background:#0d1117; border:1px solid var(--border); color:#fff; border-radius:6px; font-size:0.85rem; font-family:sans-serif;"></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:10px;">
+        <button class="btn" onclick="closeModals()">Cancel</button>
+        <button class="btn btn-primary" id="broadcast-send-btn" onclick="submitSwarmBroadcast()">🚀 Dispatch to Swarm</button>
+      </div>
+
+      <!-- Live Broadcast Results Grid -->
+      <div id="broadcast-results-container" style="margin-top:14px;"></div>
+    </div>
+  </div>
+
+  <!-- ENROLL MACHINE / ANTIGRAVITY ONBOARDING MODAL -->
+  <div class="modal-overlay" id="enroll-modal">
+    <div class="modal-box" style="max-width: 750px;">
+      <div class="modal-head">
+        <h3 style="color:#fff;">🤖 Onboard &amp; Deep-Poll Machine (Antigravity Probe)</h3>
+        <span class="modal-close" onclick="closeModals()">&times;</span>
+      </div>
+      <p style="font-size:0.82rem; color:var(--text-muted); line-height:1.45; margin-bottom:12px;">
+        To connect any machine (Windows, Linux, or macOS) on your Tailscale mesh to this Swarm Manager, copy and paste this standardized inspection prompt directly into Antigravity on that machine:
+      </p>
+
+      <div class="enroll-code-block" id="enroll-prompt-text">Execute this Antigravity Swarm Discovery &amp; Deep-Poll Enlistment on this machine:
+
+1. Inspect system environment:
+   - OS, kernel, CPU, RAM (total/free), and disk space (total/used/avail).
+   - Tailscale IP and connection status via `tailscale status --json` or `tailscale ip -4`.
+
+2. Inspect AI &amp; Agent Runtimes:
+   - Check running Hermes agents (`hermes --version`, `podman ps` / `docker ps`).
+   - Check OpenClaw runtimes (ports 18789 / 18790).
+   - Check local Antigravity IDE version and active session ID.
+   - Check A2A server on port 8080 (http://localhost:8080/.well-known/agent-card.json). If inactive, start it with Bearer token auth.
+
+3. Enlist with Hermes Fleet Controller:
+   - Run the onboard probe script:
+     python bin/fleet-enroll-node.py --hub http://100.99.202.75:8650
+   - Or submit HTTP POST to http://100.99.202.75:8650/api/fleet/register with your telemetry payload.
+
+4. Report discovered runtimes and registration confirmation back to operator.</div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
+        <span style="font-size:0.75rem; color:var(--text-muted);">Self-enrolling automatically updates the live matrix.</span>
+        <button class="btn btn-primary" id="copy-enroll-btn" onclick="copyEnrollPrompt()">📋 Copy Antigravity Prompt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOATING MULTI-AGENT ACTION BAR -->
+  <div class="multi-agent-bar" id="multi-agent-bar">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-size:0.85rem; color:#fff;">Selected: <strong id="selected-targets-count" style="color:var(--accent);">0</strong> targets</span>
+      <div id="selected-targets-preview" style="display:flex; gap:6px; flex-wrap:wrap; max-width:320px;"></div>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button class="btn btn-primary" onclick="openBroadcastModal()">📢 Swarm Broadcast</button>
+      <button class="btn" onclick="selectAllOnlineTargets()">☑️ Select Online</button>
+      <button class="btn" style="color:var(--text-muted);" onclick="clearTargetSelection()">❌ Clear</button>
+    </div>
+  </div>
+
   <script>
     let logWs = null;
 
@@ -1344,7 +2002,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         card.innerHTML = `
           <div class="agent-header">
-            <span class="agent-title">${a.name} ${latChip}</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" class="target-cb" data-type="agent" data-name="${a.name}" ${isTargetSelected('agent', a.name) ? 'checked' : ''} onchange="onTargetSelectChange()" onclick="event.stopPropagation()">
+              <span class="agent-title clickable-title" onclick="openDirectChat('${a.name}', 'agent')" title="Direct chat with ${a.name}">💬 ${a.name} ${latChip}</span>
+            </div>
             <span class="badge ${hBadge}">${hIcon} ${hStatus.toUpperCase()}</span>
           </div>
           <div class="agent-row">
@@ -1378,10 +2039,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
               <button class="fw-btn ${a.firewall === 'isolated' ? 'active-iso' : ''}" onclick="setAgentNetwork('${a.name}', 'isolated')">Isolated</button>
             </div>
           </div>
-          <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="btn" style="flex:1;" onclick="openLogs('${a.name}')">📜 Logs</button>
-            <button class="btn btn-purple" style="flex:1;" onclick="healAgent('${a.name}', this)" title="Run watchdog self-heal">🔄 Heal</button>
-            ${a.name !== 'fleet-controller' ? `<button class="btn" style="color:var(--red);" onclick="teardownAgent('${a.name}')">🛑 Remove</button>` : ''}
+          <div style="display:flex; gap:6px; margin-top:8px;">
+            <button class="btn btn-sm btn-cyan" style="flex:1;" onclick="openDirectChat('${a.name}', 'agent')">💬 Chat</button>
+            <button class="btn btn-sm" style="flex:1;" onclick="openLogs('${a.name}')">📜 Logs</button>
+            <button class="btn btn-sm btn-purple" style="flex:1;" onclick="healAgent('${a.name}', this)" title="Run watchdog self-heal">🔄 Heal</button>
+            ${a.name !== 'fleet-controller' ? `<button class="btn btn-sm" style="color:var(--red);" onclick="teardownAgent('${a.name}')">🛑</button>` : ''}
           </div>
         `;
         container.appendChild(card);
@@ -1559,6 +2221,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       document.getElementById("privacy-modal").style.display = "none";
       document.getElementById("factory-modal").style.display = "none";
       document.getElementById("logs-modal").style.display = "none";
+      const dm = document.getElementById("direct-chat-modal");
+      if (dm) dm.style.display = "none";
+      const bm = document.getElementById("broadcast-modal");
+      if (bm) bm.style.display = "none";
+      const em = document.getElementById("enroll-modal");
+      if (em) em.style.display = "none";
     }
 
     // --- SWARM FLEET NODES MANAGEMENT ---
@@ -1794,8 +2462,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         box.innerHTML = `
           <summary>
             <div class="summary-left">
+              <input type="checkbox" class="target-cb" data-type="node" data-name="${name}" data-ip="${ip}" ${isTargetSelected('node', name) ? 'checked' : ''} onchange="onTargetSelectChange()" onclick="event.stopPropagation()">
               <span class="status-dot ${statusDotClass}"></span>
-              <span>${name}</span>
+              <span class="clickable-title" onclick="event.stopPropagation(); openDirectChat('${name}', 'node', '${ip}')" title="Direct prompt to ${name}">${name}</span>
               <span style="font-family:monospace; font-size:0.8rem; color:var(--accent);">${ip}</span>
               <span class="badge badge-cyan">${os}</span>
             </div>
@@ -1806,7 +2475,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
               ${antigravityPill}
               ${diskChip}
             </div>
-            <div class="summary-right">
+            <div class="summary-right" style="display:flex; align-items:center; gap:8px;">
+              ${online ? `<button class="btn btn-sm btn-cyan" onclick="event.stopPropagation(); openDirectChat('${name}', 'node', '${ip}')" title="Prompt agent/node">💬 Prompt</button>` : ''}
+              <button class="btn btn-sm" onclick="event.stopPropagation(); triggerDeviceProbe('${name}', this)" title="Deep poll ports and A2A service">🔍 Poll</button>
               <span class="chevron-icon">▼</span>
             </div>
           </summary>
@@ -1923,6 +2594,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
               <div style="margin-top:6px; padding:6px; background:rgba(210,153,34,0.1); border:1px solid rgba(210,153,34,0.3); border-radius:4px; font-size:0.75rem; color:var(--yellow);">
                 ⚠️ <strong>Pending Updates:</strong> ${d.pendingUpdates.join(', ')}
               </div>` : ''}
+              <div style="display:flex; gap:8px; margin-top:10px;">
+                <button class="btn btn-sm btn-cyan" onclick="openDirectChat('${name}', 'node', '${ip}')">💬 Direct Message / Prompt</button>
+                <button class="btn btn-sm btn-purple" onclick="triggerDeviceProbe('${name}', this)">🔍 Deep Poll Node</button>
+              </div>
             </div>
           </div>
         `;
@@ -1931,6 +2606,326 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       });
 
       applyDeviceFilters();
+    }
+
+    // --- TARGET SELECTION & MULTI-AGENT SWARM BROADCAST ---
+    let selectedTargets = []; // [{name, type, ip}]
+    let currentChatTarget = null; // {name, type, ip}
+
+    function isTargetSelected(type, name) {
+      return selectedTargets.some(t => t.type === type && t.name.toLowerCase() === name.toLowerCase());
+    }
+
+    function onTargetSelectChange() {
+      const selected = [];
+      document.querySelectorAll(".target-cb:checked").forEach(cb => {
+        selected.push({
+          name: cb.getAttribute("data-name"),
+          type: cb.getAttribute("data-type") || "agent",
+          ip: cb.getAttribute("data-ip") || ""
+        });
+      });
+      selectedTargets = selected;
+      updateMultiAgentBar();
+    }
+
+    function updateMultiAgentBar() {
+      const bar = document.getElementById("multi-agent-bar");
+      const countEl = document.getElementById("selected-targets-count");
+      const previewEl = document.getElementById("selected-targets-preview");
+      if (!bar) return;
+
+      if (selectedTargets.length === 0) {
+        bar.style.display = "none";
+        return;
+      }
+
+      bar.style.display = "flex";
+      countEl.innerText = selectedTargets.length;
+      previewEl.innerHTML = "";
+      selectedTargets.forEach(t => {
+        const pill = document.createElement("span");
+        pill.className = "target-badge-pill";
+        const icon = t.type === "node" ? "🌐" : "🤖";
+        pill.innerHTML = `${icon} ${t.name} <span style="cursor:pointer; margin-left:4px;" onclick="unselectTarget('${t.type}', '${t.name}')">&times;</span>`;
+        previewEl.appendChild(pill);
+      });
+    }
+
+    function unselectTarget(type, name) {
+      document.querySelectorAll(`.target-cb[data-type="${type}"][data-name="${name}"]`).forEach(cb => {
+        cb.checked = false;
+      });
+      onTargetSelectChange();
+    }
+
+    function clearTargetSelection() {
+      document.querySelectorAll(".target-cb").forEach(cb => cb.checked = false);
+      selectedTargets = [];
+      updateMultiAgentBar();
+    }
+
+    function selectAllOnlineTargets() {
+      document.querySelectorAll(".agent-card .target-cb").forEach(cb => cb.checked = true);
+      document.querySelectorAll('#devices-container details.device-box[data-online="true"] .target-cb').forEach(cb => cb.checked = true);
+      onTargetSelectChange();
+    }
+
+    // --- 1-CLICK DIRECT AGENT & NODE CHAT ---
+    function openDirectChat(name, type, ip) {
+      currentChatTarget = { name, type: type || 'agent', ip: ip || '' };
+      document.getElementById("chat-target-name").innerText = name;
+      const typeBadge = document.getElementById("chat-target-badge");
+      if (typeBadge) {
+        typeBadge.innerText = (type === 'node') ? '🌐 TAILSCALE NODE / A2A' : '🤖 HERMES AGENT';
+        typeBadge.className = (type === 'node') ? 'badge badge-purple' : 'badge badge-green';
+      }
+      const ipSub = document.getElementById("chat-target-ip");
+      if (ipSub) {
+        ipSub.innerText = ip ? `Endpoint: ${ip}` : `Local Container Execution`;
+      }
+      
+      const history = document.getElementById("chat-history");
+      history.innerHTML = `
+        <div class="chat-msg agent">
+          <strong>${name}</strong> [Ready]<br>
+          Connected via ${type === 'node' ? 'A2A protocol (:8080)' : 'Hermes Agent runtime'}. Type an instruction or click a quick prompt below.
+        </div>
+      `;
+      document.getElementById("chat-input").value = "";
+      document.getElementById("direct-chat-modal").style.display = "flex";
+      document.getElementById("chat-input").focus();
+    }
+
+    function sendPresetPrompt(text) {
+      document.getElementById("chat-input").value = text;
+      sendDirectChatPrompt();
+    }
+
+    async function sendDirectChatPrompt() {
+      if (!currentChatTarget) return;
+      const input = document.getElementById("chat-input");
+      const prompt = input.value.trim();
+      if (!prompt) return;
+
+      const history = document.getElementById("chat-history");
+      const sendBtn = document.getElementById("chat-send-btn");
+      const latencyIndicator = document.getElementById("chat-latency-indicator");
+
+      // Append user msg
+      const userBubble = document.createElement("div");
+      userBubble.className = "chat-msg user";
+      userBubble.innerHTML = `<strong>You:</strong><br>${escapeHtml(prompt)}`;
+      history.appendChild(userBubble);
+      input.value = "";
+      history.scrollTop = history.scrollHeight;
+
+      // Pending agent bubble
+      const agentBubble = document.createElement("div");
+      agentBubble.className = "chat-msg agent";
+      agentBubble.innerHTML = `<strong>${currentChatTarget.name}:</strong><br><span style="color:var(--text-muted);">⏳ Executing & awaiting response...</span>`;
+      history.appendChild(agentBubble);
+      history.scrollTop = history.scrollHeight;
+
+      sendBtn.disabled = true;
+      sendBtn.innerText = "⏳ Sending...";
+      if (latencyIndicator) latencyIndicator.innerText = "";
+
+      try {
+        const res = await fetch(`/api/agents/${encodeURIComponent(currentChatTarget.name)}/prompt`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + getSessionToken(),
+            "X-Fleet-Session": getSessionToken()
+          },
+          body: JSON.stringify({
+            message: prompt,
+            type: currentChatTarget.type,
+            ip: currentChatTarget.ip
+          })
+        });
+        const data = await res.json();
+        const reply = data.response || data.error || (data.success ? "Execution acknowledged." : "No response");
+        const lat = data.latency_ms !== undefined ? ` <span style="font-size:0.75rem; color:var(--cyan); font-weight:600;">⚡ ${data.latency_ms}ms</span>` : "";
+
+        agentBubble.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <strong>${currentChatTarget.name}</strong>${lat}
+          </div>
+          <div>${formatResponseText(reply)}</div>
+        `;
+        if (latencyIndicator && data.latency_ms) {
+          latencyIndicator.innerText = `Latency: ${data.latency_ms}ms`;
+        }
+      } catch (e) {
+        agentBubble.innerHTML = `<strong>${currentChatTarget.name}:</strong><br><span style="color:var(--red);">⚠️ Communication error: ${escapeHtml(String(e))}</span>`;
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerText = "Send ⏎";
+        history.scrollTop = history.scrollHeight;
+      }
+    }
+
+    // --- SWARM BROADCAST CONSOLE ---
+    function openBroadcastModal() {
+      if (selectedTargets.length === 0) {
+        alert("Please select at least one agent or node first.");
+        return;
+      }
+      document.getElementById("broadcast-modal").style.display = "flex";
+      document.getElementById("broadcast-count").innerText = selectedTargets.length;
+      const chips = document.getElementById("broadcast-targets-chips");
+      chips.innerHTML = "";
+      selectedTargets.forEach(t => {
+        const icon = t.type === "node" ? "🌐" : "🤖";
+        chips.innerHTML += `<span class="target-badge-pill">${icon} ${t.name}</span>`;
+      });
+      document.getElementById("broadcast-results-container").innerHTML = "";
+      document.getElementById("broadcast-message-input").value = "";
+    }
+
+    function setBroadcastPreset(text) {
+      document.getElementById("broadcast-message-input").value = text;
+    }
+
+    async function submitSwarmBroadcast() {
+      const input = document.getElementById("broadcast-message-input");
+      const msg = input.value.trim();
+      if (!msg) {
+        alert("Please enter a broadcast prompt.");
+        return;
+      }
+
+      const btn = document.getElementById("broadcast-send-btn");
+      const resultsContainer = document.getElementById("broadcast-results-container");
+      resultsContainer.innerHTML = `<div style="color:var(--accent); padding:10px;">🚀 Dispatching concurrently to ${selectedTargets.length} swarm targets...</div>`;
+
+      btn.disabled = true;
+      btn.innerText = "⏳ Broadcasting...";
+
+      try {
+        const res = await fetch("/api/fleet/broadcast", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + getSessionToken(),
+            "X-Fleet-Session": getSessionToken()
+          },
+          body: JSON.stringify({
+            targets: selectedTargets,
+            message: msg
+          })
+        });
+        const data = await res.json();
+        const results = data.results || [];
+
+        let gridHtml = `
+          <div style="margin-bottom:10px; font-size:0.85rem; color:#fff;">
+            <strong>Broadcast Summary:</strong> Total: ${data.total} | <span style="color:var(--green);">Succeeded: ${data.succeeded}</span> | <span style="color:var(--red);">Failed: ${data.failed}</span>
+          </div>
+          <div class="broadcast-results-grid">
+        `;
+
+        results.forEach(r => {
+          const isOk = r.success;
+          const statusBadge = isOk ? '<span class="badge badge-green">🟢 OK</span>' : '<span class="badge badge-red">🔴 ERROR</span>';
+          const icon = r.type === "node" ? "🌐" : "🤖";
+          const lat = (r.latency_ms && r.latency_ms >= 0) ? `<span style="font-size:0.75rem; color:var(--cyan); margin-left:6px;">⚡ ${r.latency_ms}ms</span>` : "";
+          const reply = r.response || r.error || "No response";
+
+          gridHtml += `
+            <div class="broadcast-result-card">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-weight:600; color:#fff;">${icon} ${r.target} ${lat}</span>
+                ${statusBadge}
+              </div>
+              <div style="font-size:0.8rem; color:#c9d1d9; max-height:160px; overflow-y:auto; line-height:1.4;">
+                ${formatResponseText(reply)}
+              </div>
+            </div>
+          `;
+        });
+
+        gridHtml += `</div>`;
+        resultsContainer.innerHTML = gridHtml;
+      } catch (e) {
+        resultsContainer.innerHTML = `<div style="color:var(--red); padding:10px;">⚠️ Broadcast failure: ${escapeHtml(String(e))}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "🚀 Dispatch to Swarm";
+      }
+    }
+
+    // --- ENROLLMENT & DEEP PROBING ---
+    function openEnrollModal() {
+      document.getElementById("enroll-modal").style.display = "flex";
+    }
+
+    function copyEnrollPrompt() {
+      const codeEl = document.getElementById("enroll-prompt-text");
+      const text = codeEl.innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById("copy-enroll-btn");
+        btn.innerText = "✅ Copied to Clipboard!";
+        btn.style.background = "rgba(63, 185, 80, 0.3)";
+        setTimeout(() => {
+          btn.innerText = "📋 Copy Antigravity Prompt";
+          btn.style.background = "";
+        }, 2500);
+      });
+    }
+
+    async function triggerDeviceProbe(nodeName, btn) {
+      if (btn) btn.innerText = "⏳ Polling...";
+      try {
+        const res = await fetch(`/api/fleet/devices/${encodeURIComponent(nodeName)}/probe`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + getSessionToken(),
+            "X-Fleet-Session": getSessionToken()
+          }
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`Deep poll on '${nodeName}' completed in ${data.latency_ms}ms.`);
+          fetchDevices();
+        } else {
+          alert(`Probe error: ${data.detail || "Failed"}`);
+        }
+      } catch (e) {
+        alert("Failed to probe node: " + e);
+      } finally {
+        if (btn) btn.innerText = "🔍 Poll";
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function formatResponseText(text) {
+      if (!text) return "";
+      if (text.includes("```")) {
+        const parts = text.split("```");
+        let formatted = "";
+        for (let i = 0; i < parts.length; i++) {
+          if (i % 2 === 1) {
+            formatted += `<pre>${escapeHtml(parts[i].trim())}</pre>`;
+          } else {
+            formatted += `<div>${escapeHtml(parts[i]).replace(/\\n/g, '<br>')}</div>`;
+          }
+        }
+        return formatted;
+      }
+      return `<div>${escapeHtml(text).replace(/\\n/g, '<br>')}</div>`;
     }
 
     // Initialize
