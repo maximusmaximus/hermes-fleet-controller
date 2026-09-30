@@ -53,6 +53,9 @@ ln -sf "${FLEET_DIR}/bin/fleet-report" /usr/local/bin/fleet-report
 ln -sf "${FLEET_DIR}/bin/fleet-self-improve.py" /usr/local/bin/fleet-self-improve
 ln -sf "${FLEET_DIR}/bin/fleet-rollback.sh" /usr/local/bin/fleet-rollback
 ln -sf "${FLEET_DIR}/bin/venice-resolve-model.sh" /usr/local/bin/venice-resolve-model
+ln -sf "${FLEET_DIR}/bin/fleet-watchdog.py" /usr/local/bin/fleet-watchdog
+ln -sf "${FLEET_DIR}/bin/fleet-connect-agent.py" /usr/local/bin/fleet-connect-agent
+ln -sf "${FLEET_DIR}/bin/fleet-boot-check.sh" /usr/local/bin/fleet-boot-check
 
 # 5. Copy skills and souls
 cp -r "${SCRIPT_DIR}/skills/"* "${FLEET_DIR}/skills/"
@@ -74,9 +77,27 @@ echo "[*] Launching key attachment and credentials setup..."
 
 # 8. Enable and start systemd units
 systemctl daemon-reload
-systemctl enable --now hermes-fleet-controller.service
+
+# 8.1. Enable Podman container restart on system boot
+systemctl enable podman-restart.service 2>/dev/null || true
+
+# 8.2. Enable and start all Hermes swarm agent services
+for unit in /etc/systemd/system/hermes-*.service; do
+    [ -f "$unit" ] && systemctl enable --now "$(basename "$unit")" 2>/dev/null || true
+done
+
+# 8.3. Enable and start core infrastructure daemons
 systemctl enable --now fleet-dashboard.service
 systemctl enable --now fleet-tunnel.service
+systemctl enable --now fleet-agent-watcher.service
+systemctl enable fleet-boot.service 2>/dev/null || true
+
+# 8.4. Enable and start scheduled timers
+systemctl enable --now fleet-watchdog.timer
+systemctl enable --now fleet-health-digest.timer
+systemctl enable --now fleet-prune.timer
+systemctl enable --now fleet-pull.timer
+systemctl enable --now fleet-ha-log-watcher.timer
 systemctl enable --now fleet-report.timer
 systemctl enable --now fleet-daily.timer
 systemctl enable --now fleet-doc-sync.timer
@@ -92,6 +113,9 @@ echo "  • Dashboard Service   : fleet-dashboard.service (Port 8650)"
 echo "  • Cloudflare Tunnel   : fleet-tunnel.service"
 echo "  • Device Pairing PIN  : Run 'fleet-pair' on this terminal"
 echo "  • Status & Audit      : status (or status --audit)"
+echo "  • Health Watchdog     : fleet-watchdog (--heal / --json / --digest)"
+echo "  • Boot Validator      : fleet-boot.service & fleet-boot-check"
+echo "  • Agent Discovery     : fleet-agent-watcher.service"
 echo "  • Daily Operations    : fleet-report (--send / --stdout)"
 echo "  • Network Firewall    : fleet-firewall <agent> <full|restricted|isolated>"
 echo "  • AI Agent Factory    : fleet-factory generate <name> <spec>"

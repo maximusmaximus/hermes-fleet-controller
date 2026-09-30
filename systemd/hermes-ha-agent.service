@@ -1,0 +1,25 @@
+[Unit]
+Description=Hermes child agent ha-agent
+After=network-online.target hermes-fleet-controller.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+ExecStartPre=-/usr/bin/podman rm -f hermes-ha-agent
+ExecStart=/usr/bin/podman run --name hermes-ha-agent \
+  --memory 500m \
+  --env-file /opt/fleet/agents/ha-agent/.env \
+  -e HERMES_AGENT_NAME=ha-agent \
+  -v /opt/fleet/agents/ha-agent:/opt/data:Z \
+  -v /opt/fleet/skills:/opt/fleet/skills:ro,Z \
+  -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \
+  -p 127.0.0.1:8643:8642 \
+  docker.io/nousresearch/hermes-agent:latest hermes gateway run
+ExecStop=/usr/bin/podman stop -t 10 hermes-ha-agent
+ExecStopPost=-/usr/bin/podman rm -f hermes-ha-agent
+
+[Install]
+WantedBy=multi-user.target

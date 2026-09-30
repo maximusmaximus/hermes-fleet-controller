@@ -1,0 +1,27 @@
+[Unit]
+Description=Hermes child agent codereview-trollbox (openai-gpt-6-luna)
+After=network-online.target hermes-fleet-controller.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+ExecStartPre=-/usr/bin/podman rm -f hermes-codereview-trollbox
+ExecStart=/usr/bin/podman run --name hermes-codereview-trollbox \
+  --memory 500m \
+  --env-file /opt/fleet/agents/codereview-trollbox/.env \
+  -e HERMES_AGENT_NAME=codereview-trollbox \
+  -v /opt/fleet/agents/codereview-trollbox:/opt/data:Z \
+  -v /opt/fleet/skills:/opt/fleet/skills:ro,Z \
+  -v /opt/fleet/bin:/opt/fleet/bin:ro,Z \
+  -v /opt/fleet/shared-workspace:/opt/fleet/shared-workspace:rw,Z \
+  -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \
+  -p 127.0.0.1:8646:8642 \
+  docker.io/nousresearch/hermes-agent:latest hermes gateway run
+ExecStop=/usr/bin/podman stop -t 10 hermes-codereview-trollbox
+ExecStopPost=-/usr/bin/podman rm -f hermes-codereview-trollbox
+
+[Install]
+WantedBy=multi-user.target

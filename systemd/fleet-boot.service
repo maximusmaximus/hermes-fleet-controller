@@ -1,0 +1,15 @@
+[Unit]
+Description=Hermes Fleet Post-Boot Validation & Self-Healing Service
+Documentation=https://github.com/nousresearch/hermes-agent
+After=network-online.target hermes-fleet-controller.service fleet-dashboard.service fleet-tunnel.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/fleet/bin/fleet-boot-check.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

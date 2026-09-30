@@ -2,6 +2,7 @@
 Description=Hermes Fleet Autonomous Health Watchdog Timer (3m)
 
 [Timer]
+OnBootSec=1min
 OnCalendar=*:0/3
 Persistent=true
 RandomizedDelaySec=15

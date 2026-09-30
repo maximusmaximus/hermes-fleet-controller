@@ -1,0 +1,29 @@
+[Unit]
+Description=Hermes child agent venice-key-agent
+After=network-online.target hermes-fleet-controller.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+ExecStartPre=-/usr/bin/podman rm -f hermes-venice-key-agent
+ExecStart=/usr/bin/podman run --name hermes-venice-key-agent \
+  --memory 500m \
+  --env-file /opt/fleet/agents/venice-key-agent/.env \
+  -e HERMES_AGENT_NAME=venice-key-agent \
+  -v /opt/fleet/agents/venice-key-agent:/opt/data:Z \
+  -v /opt/fleet/skills:/opt/fleet/skills:ro,Z \
+  -v /opt/fleet/bin:/opt/fleet/bin:ro,Z \
+  -v /opt/venice-key-manager:/opt/venice-key-manager:ro,Z \
+  -v /opt/venice-key-manager/data:/opt/venice-key-manager/data:rw,Z \
+  -v /opt/fleet/shared-workspace:/opt/fleet/shared-workspace:rw,Z \
+  -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \
+  -p 127.0.0.1:8645:8642 \
+  docker.io/nousresearch/hermes-agent:latest hermes gateway run
+ExecStop=/usr/bin/podman stop -t 10 hermes-venice-key-agent
+ExecStopPost=-/usr/bin/podman rm -f hermes-venice-key-agent
+
+[Install]
+WantedBy=multi-user.target

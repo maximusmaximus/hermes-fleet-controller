@@ -1,0 +1,27 @@
+[Unit]
+Description=Hermes child agent janitor
+After=network-online.target hermes-fleet-controller.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+ExecStartPre=-/usr/bin/podman rm -f hermes-janitor
+ExecStart=/usr/bin/podman run --name hermes-janitor \
+  --memory 500m \
+  --env-file /opt/fleet/agents/janitor/.env \
+  -e HERMES_AGENT_NAME=janitor \
+  -v /opt/fleet/agents/janitor:/opt/data:Z \
+  -v /opt/fleet/skills:/opt/fleet/skills:ro,Z \
+  -v /opt/fleet/bin:/opt/fleet/bin:ro,Z \
+  -v /opt/fleet/shared-workspace:/opt/fleet/shared-workspace:rw,Z \
+  -v /opt/fleet/patches/run_inbound.py:/opt/hermes/gateway/run_inbound.py:ro,Z \
+  -p 127.0.0.1:8647:8642 \
+  docker.io/nousresearch/hermes-agent:latest hermes gateway run
+ExecStop=/usr/bin/podman stop -t 10 hermes-janitor
+ExecStopPost=-/usr/bin/podman rm -f hermes-janitor
+
+[Install]
+WantedBy=multi-user.target
