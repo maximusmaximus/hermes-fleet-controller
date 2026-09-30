@@ -114,7 +114,7 @@ hermes-fleet-controller/
 | Vulnerability / Edge Case | Failure Mode Without Safeguard | Built-In Safeguard Solution |
 | :--- | :--- | :--- |
 | **1. Self-Improvement Hallucination Spiral** | Agent authors broken Python syntax or bad prompt, merges it, and cascades errors weekly. | **3-Layer Gate**: Automated `py_compile` check, zero-leak scan, **Human-in-the-loop merge (no auto-merge)**, plus `fleet-rollback` command. |
-| **2. Pairing PIN Brute-Force** | Web crawlers on Cloudflare HTTPS URL brute-force 6-digit PIN (1,000,000 combinations). | **Rate-Limiter**: 5 failed attempts locks IP for 15 minutes. PIN expires in 10 minutes. Signed HMAC-SHA256 session tokens. |
+| **2. Tunnel Crawlers & PIN Brute-Force** | Web crawlers on Cloudflare HTTPS URL discover the portal and brute-force 6-digit PINs. | **Cloudflare 404 Stealth & Long-Key Gate**: Over Cloudflare Tunnel, access is strictly limited to the cryptographic Long Key Link (`/?key=<long_key>`). Any visit without the key, with an invalid key, or attempting short PINs returns pure **HTTP 404 Not Found** (cloaking the service). Short PIN and rate-limiter (5 attempts = 15m lockout) remain active for local LAN and Tailscale access. |
 | **3. Firewall Egress DNS Failure** | Blocking WAN on "Restricted" container breaks UDP 53, preventing resolution of `api.venice.ai`. | **Port 53 & Subnet Whitelist**: `fleet-firewall.sh` always permits UDP/TCP 53 (DNS) and local bridge subnet (`10.88.0.0/16`). |
 | **4. Telegram 4096-Char Overflow** | Daily report with multiple agents & MCP tools exceeds 4096 chars &rarr; Telegram HTTP 400 rejection. | **Smart Message Chunking**: `fleet-report.py` paginates reports into < 4000-char blocks at section boundaries or attaches `.md`. |
 | **5. Telegram Token Collisions** | Reusing a bot token between 2 agents causes `HTTP 409 Conflict: terminated by other getUpdates`. | **Pre-Flight Token Validation**: `fleet-factory.py` verifies entered token is not already active in `/opt/fleet/agents/*/.env`. |
@@ -140,15 +140,17 @@ sudo ./install.sh
 
 To pair your mobile device or remote laptop with the controller Web Dashboard:
 
-1. View your public Cloudflare URL:
-   ```bash
-   cat /opt/fleet/tunnel-url.txt
-   ```
-2. Generate a 6-digit pairing PIN on the controller terminal:
+1. Generate a secure access link and pairing credentials on the controller terminal:
    ```bash
    fleet-pair
    ```
-3. Open the Cloudflare URL on your device and enter the 6-digit PIN. Once authenticated, an HMAC-SHA256 session cookie is stored in your browser.
+2. **Cloudflare Tunnel Access (Stealth 404 Mode)**:
+   - Tap the generated **One-Click Direct Login URL** (`https://<tunnel-subdomain>.trycloudflare.com/?key=<long_key>`).
+   - The server verifies the 32-byte cryptographic key, issues a signed HMAC-SHA256 session cookie, and opens the dashboard.
+   - Any unauthenticated request or attempt to enter short numeric PINs over the tunnel returns an authentic **HTTP 404 Not Found**, keeping your controller invisible to internet scanners.
+3. **Local LAN & Tailscale Mesh Access**:
+   - Access the dashboard directly via `http://<tailscale-ip>:8650` or `http://localhost:8650`.
+   - On local/Tailscale networks, you can log in using either the 6-digit PIN on the auth gate or the direct link. Rate-limiting protects against brute-force (5 attempts = 15m lockout).
 
 ---
 
@@ -218,8 +220,8 @@ Execute this Antigravity Swarm Discovery & Deep-Poll Enlistment on this machine:
 
 3. Enlist with Hermes Fleet Controller:
    - Run the onboard probe script:
-     python bin/fleet-enroll-node.py --hub http://100.99.202.75:8650
-   - Or submit HTTP POST to http://100.99.202.75:8650/api/fleet/register with your telemetry payload.
+     python bin/fleet-enroll-node.py --hub http://<FLEET_HUB_HOST_OR_IP>:8650
+   - Or submit HTTP POST to http://<FLEET_HUB_HOST_OR_IP>:8650/api/fleet/register with your telemetry payload.
 
 4. Report discovered runtimes and registration confirmation back to operator.
 ```
@@ -229,7 +231,7 @@ Run the standalone cross-platform probe on any node with zero external dependenc
 
 ```bash
 # Deep-poll local node and register with the Swarm Hub
-python bin/fleet-enroll-node.py --hub http://100.99.202.75:8650
+python bin/fleet-enroll-node.py --hub http://<FLEET_HUB_HOST_OR_IP>:8650
 
 # Dry-run inspection without transmitting telemetry
 python bin/fleet-enroll-node.py --dry-run

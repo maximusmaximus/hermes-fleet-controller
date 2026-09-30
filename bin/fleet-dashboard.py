@@ -54,6 +54,97 @@ except Exception:
 app = FastAPI(title="Hermes Fleet Controller", version="2.0")
 
 
+# --- SECRETS & ENVIRONMENT HELPERS ---
+
+def load_secrets_env(filepath: str = None) -> dict:
+    if filepath is None:
+        filepath = os.path.join(FLEET_DIR, "secrets.env")
+    env = {}
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        env[k.strip()] = v.strip().strip("\"'")
+        except Exception:
+            pass
+    return env
+
+
+def load_env(filepath: str = None) -> dict:
+    return load_secrets_env(filepath)
+
+
+def get_a2a_token() -> str:
+    # 1. Environment variable
+    token = os.environ.get("A2A_AUTH_TOKEN", "").strip()
+    if token:
+        return token
+    # 2. secrets.env file
+    env = load_secrets_env()
+    token = env.get("A2A_AUTH_TOKEN", "").strip() or env.get("A2A_BEARER_TOKEN", "").strip()
+    return token
+
+
+# --- TUNNEL DETECTION & 404 STEALTH TEMPLATE ---
+
+NOT_FOUND_HTML = """<!DOCTYPE html>
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>cloudflare</center>
+</body>
+</html>
+"""
+
+
+def is_tunnel_request(request) -> bool:
+    """Detect if an incoming HTTP or WebSocket request originates from Cloudflare Tunnel."""
+    try:
+        headers = request.headers
+    except Exception:
+        return False
+
+    # 1. Cloudflare edge proxy headers
+    for h in ("cf-ray", "cf-connecting-ip", "cf-visitor", "cf-ipcountry", "cf-worker"):
+        if h in headers:
+            return True
+
+    # 2. Host header matching Cloudflare domain
+    host = headers.get("host", "").lower().split(":")[0]
+    if "trycloudflare.com" in host or "cloudflare" in host:
+        return True
+
+    # 3. Dynamic match against tunnel-url.txt hostname
+    tunnel_candidates = [
+        os.path.join(FLEET_DIR, "tunnel-url.txt"),
+        os.path.join(FLEET_DIR, "shared-workspace", "tunnel-url.txt")
+    ]
+    for cand in tunnel_candidates:
+        if os.path.exists(cand):
+            try:
+                with open(cand, "r") as f:
+                    content = f.read().strip()
+                    m = re.search(r"https?://([^/\s:]+)", content)
+                    if m and m.group(1).lower() == host:
+                        return True
+            except Exception:
+                pass
+
+    return False
+
+
+def render_404(request: Request = None) -> Response:
+    if request:
+        accept = request.headers.get("accept", "")
+        if "application/json" in accept or request.url.path.startswith("/api/"):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+    return HTMLResponse(content=NOT_FOUND_HTML, status_code=404)
+
+
 # --- AUTHENTICATION HELPERS ---
 
 def set_session_cookie(response: Response, token: str, request: Request):
@@ -78,6 +169,7 @@ def get_client_ip(request: Request) -> str:
 
 
 def is_authenticated(request: Request) -> bool:
+    is_tunnel = is_tunnel_request(request)
     session_token = request.cookies.get("fleet_session")
     if not session_token:
         auth_header = request.headers.get("Authorization", "")
@@ -86,22 +178,43 @@ def is_authenticated(request: Request) -> bool:
     if not session_token:
         session_token = request.headers.get("X-Fleet-Session")
     if not session_token:
-        session_token = (
-            request.query_params.get("session")
+        cand = (
+            request.query_params.get("key")
             or request.query_params.get("token")
-            or request.query_params.get("key")
             or request.query_params.get("auth")
+            or request.query_params.get("session")
         )
+        if not is_tunnel and not cand:
+            cand = request.query_params.get("pin")
+        if cand:
+            if is_tunnel and (len(cand) < 20 or cand.isdigit()):
+                return False
+            session_token = cand
 
     if not session_token:
         return False
+
+    if is_tunnel and (len(session_token) < 20 or session_token.isdigit()):
+        return False
+
     if fleet_pair:
         if hasattr(fleet_pair, "verify_token") and fleet_pair.verify_token(session_token):
+            return True
+        if hasattr(fleet_pair, "check_active_key") and fleet_pair.check_active_key(session_token):
             return True
         if hasattr(fleet_pair, "verify_key_or_pin"):
             ok, _, _ = fleet_pair.verify_key_or_pin(session_token, get_client_ip(request))
             return ok
     return True
+
+
+@app.middleware("http")
+async def cloudflare_tunnel_security_gate(request: Request, call_next):
+    if is_tunnel_request(request):
+        if not is_authenticated(request):
+            return render_404(request)
+    return await call_next(request)
+
 
 
 
@@ -388,7 +501,7 @@ def probe_node_services(name, ip, dev_existing=None):
     if a2a_open:
         probed["services"]["a2a-server"] = {"running": True, "port": 8080, "health": "OK", "auth": "Bearer"}
         try:
-            a2a_token = os.environ.get("A2A_AUTH_TOKEN", "2u6GZL1hOE_3TPrByRzdndMsxwUGwJF3lYDbm6HEzME")
+            a2a_token = get_a2a_token()
             req = urllib.request.Request(
                 f"http://{ip}:8080/.well-known/agent-card.json",
                 headers={"Authorization": f"Bearer {a2a_token}", "User-Agent": "FleetController/2.0"}
@@ -478,7 +591,7 @@ async def dispatch_prompt_to_target(name: str, prompt: str, target_type: str = "
         if not node_ip:
             node_ip = name
 
-        a2a_token = os.environ.get("A2A_AUTH_TOKEN", "2u6GZL1hOE_3TPrByRzdndMsxwUGwJF3lYDbm6HEzME")
+        a2a_token = get_a2a_token()
         a2a_url = f"http://{node_ip}:8080/a2a/v1/message"
 
         try:
@@ -1085,6 +1198,7 @@ async def api_probe_device(name: str, request: Request):
 # --- WEBSOCKET FEEDS ---
 
 def is_ws_authenticated(websocket: WebSocket) -> bool:
+    is_tunnel = is_tunnel_request(websocket)
     session_token = websocket.cookies.get("fleet_session")
     if not session_token:
         session_token = (
@@ -1093,6 +1207,8 @@ def is_ws_authenticated(websocket: WebSocket) -> bool:
             or websocket.query_params.get("key")
             or websocket.query_params.get("auth")
         )
+        if not is_tunnel and not session_token:
+            session_token = websocket.query_params.get("pin")
     if not session_token:
         session_token = websocket.headers.get("x-fleet-session")
     if not session_token:
@@ -1101,8 +1217,14 @@ def is_ws_authenticated(websocket: WebSocket) -> bool:
             session_token = auth_hdr[7:].strip()
     if not session_token:
         return False
+
+    if is_tunnel and (len(session_token) < 20 or session_token.isdigit()):
+        return False
+
     if fleet_pair:
         if hasattr(fleet_pair, "verify_token") and fleet_pair.verify_token(session_token):
+            return True
+        if hasattr(fleet_pair, "check_active_key") and fleet_pair.check_active_key(session_token):
             return True
         if hasattr(fleet_pair, "verify_key_or_pin"):
             client_ip = websocket.client.host if websocket.client else "127.0.0.1"
@@ -3214,15 +3336,28 @@ AUTH_GATE_HTML = """<!DOCTYPE html>
 @app.head("/")
 def index(request: Request):
     client_ip = get_client_ip(request)
+    is_tunnel = is_tunnel_request(request)
 
     # 1. URL key / token / pin / session auto-login via query param
-    url_param = (
-        request.query_params.get("key")
-        or request.query_params.get("token")
-        or request.query_params.get("pin")
-        or request.query_params.get("auth")
-        or request.query_params.get("session")
-    )
+    if is_tunnel:
+        url_param = (
+            request.query_params.get("key")
+            or request.query_params.get("token")
+            or request.query_params.get("auth")
+            or request.query_params.get("session")
+        )
+        # On Cloudflare tunnel, reject short numeric PINs or candidates < 20 chars
+        if url_param and (len(url_param) < 20 or url_param.isdigit()):
+            return render_404(request)
+    else:
+        url_param = (
+            request.query_params.get("key")
+            or request.query_params.get("token")
+            or request.query_params.get("pin")
+            or request.query_params.get("auth")
+            or request.query_params.get("session")
+        )
+
     if url_param and fleet_pair:
         # Check if already a valid session token
         if hasattr(fleet_pair, "verify_token") and fleet_pair.verify_token(url_param):
@@ -3238,6 +3373,8 @@ def index(request: Request):
                 resp = RedirectResponse(url="/", status_code=303)
                 set_session_cookie(resp, token, request)
                 return resp
+            elif is_tunnel:
+                return render_404(request)
 
     # 2. Check if user is authenticated via cookie, Authorization Bearer, or query params
     if is_authenticated(request):
@@ -3256,7 +3393,9 @@ def index(request: Request):
             set_session_cookie(resp, token, request)
         return resp
 
-    # 3. NOT authenticated: Return ONLY the PIN Protection Lock Screen (401)
+    # 3. NOT authenticated
+    if is_tunnel:
+        return render_404(request)
     return HTMLResponse(content=AUTH_GATE_HTML, status_code=401)
 
 

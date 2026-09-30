@@ -30,7 +30,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-DEFAULT_HUB_URL = os.environ.get("FLEET_HUB_URL", "http://100.99.202.75:8650")
+DEFAULT_HUB_URL = os.environ.get("FLEET_HUB_URL", "http://127.0.0.1:8650")
 DEFAULT_A2A_PORT = 8080
 
 
@@ -150,7 +150,7 @@ def check_a2a_server(port=8080, ip=None):
     candidates = [f"http://127.0.0.1:{port}/.well-known/agent-card.json"]
     if ip and ip != "127.0.0.1":
         candidates.append(f"http://{ip}:{port}/.well-known/agent-card.json")
-    a2a_token = os.environ.get("A2A_AUTH_TOKEN", "2u6GZL1hOE_3TPrByRzdndMsxwUGwJF3lYDbm6HEzME")
+    a2a_token = os.environ.get("A2A_AUTH_TOKEN", "")
     headers = {
         "User-Agent": "FleetEnrollProbe/1.0",
         "Authorization": f"Bearer {a2a_token}"

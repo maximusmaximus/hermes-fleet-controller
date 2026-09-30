@@ -175,6 +175,33 @@ def verify_token(token):
     return token in db.get("valid_sessions", {})
 
 
+def check_active_key(candidate):
+    """Read-only verification of whether candidate matches the unexpired active_key."""
+    if not candidate:
+        return False
+    candidate = str(candidate).strip()
+    if len(candidate) < 20 or candidate.isdigit():
+        return False
+    if "?" in candidate:
+        try:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(candidate)
+            qs = urllib.parse.parse_qs(parsed.query)
+            extracted = qs.get("key", [""])[0] or qs.get("token", [""])[0] or qs.get("auth", [""])[0]
+            if extracted:
+                candidate = extracted
+        except Exception:
+            pass
+
+    db = load_auth_db()
+    active_key = db.get("active_key")
+    pin_expiry = db.get("pin_expires_at", 0)
+    now = int(time.time())
+    if now > pin_expiry or not active_key:
+        return False
+    return hmac.compare_digest(candidate, str(active_key).strip())
+
+
 def get_tunnel_url():
     candidates = [
         TUNNEL_FILE,
@@ -210,6 +237,14 @@ def main():
         print("valid" if valid else "invalid")
         sys.exit(0 if valid else 1)
 
+    if len(sys.argv) > 1 and sys.argv[1] in ("--check-key", "-k"):
+        if len(sys.argv) < 3:
+            print("Usage: fleet-pair.py --check-key <key>")
+            sys.exit(1)
+        valid = check_active_key(sys.argv[2])
+        print("valid" if valid else "invalid")
+        sys.exit(0 if valid else 1)
+
     # Generate new credentials
     pin, key, expires_at = generate_credentials()
     now = int(time.time())
@@ -233,10 +268,11 @@ def main():
         "🔐 *HERMES FLEET DASHBOARD ACCESS*\n\n"
         f"⚡ *One-Click Auto-Login Link*:\n{direct_login_url}\n\n"
         f"🔑 *Telegram Access Key* (for pasting):\n`{key}`\n\n"
-        f"🔢 *Short PIN*: `{pin}`\n"
+        f"🔢 *Short PIN* (LAN / Tailscale only): `{pin}`\n"
         f"⏳ *Valid For*: {ttl_str}\n"
-        "🛡️ *Security*: The dashboard interface is PIN-protected and requires this key or PIN.\n\n"
-        "👉 Tap the link above to immediately unlock the dashboard, or enter PIN into the login gate."
+        "🛡️ *Cloudflare Tunnel Stealth*: Over Cloudflare Tunnel, only the Long Key Link is permitted. "
+        "Any unauthenticated visit or short PIN attempt returns HTTP 404 to keep the controller hidden from crawlers.\n\n"
+        "👉 Tap the link above to immediately unlock the dashboard, or enter PIN into the local/Tailscale gate."
     )
 
 
@@ -257,10 +293,11 @@ def main():
     print("=" * 60)
     print(f"\n  One-Click Direct Login URL:  \033[1;36m{direct_login_url}\033[0m")
     print(f"  Access Key (long string):    \033[1;32m{key}\033[0m")
-    print(f"  Short 6-Digit PIN:           \033[1;33m{pin}\033[0m")
+    print(f"  Short PIN (LAN/Tailscale):   \033[1;33m{pin}\033[0m")
     print(f"  Valid for:                   {ttl // 60} minutes ({ttl} seconds)")
+    print(f"  Cloudflare Tunnel Mode:      STRICT 404 STEALTH (Long Key Link Required)")
     print(f"  Rate-limit protection:       5 failed attempts = 15m lockout")
-    print("\n  The Web Dashboard is strictly locked until this key or PIN is submitted.\n")
+    print("\n  Over the Cloudflare Tunnel, access is restricted to the Long Key Link or returns 404.\n")
     print("=" * 60)
 
 

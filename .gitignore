@@ -6,6 +6,8 @@ secrets.env
 ssh/fleet_ed25519*
 credentials/
 device-auth.json
+web-auth.json
+*.tmp
 
 # Ephemeral runtime state
 inventory.yaml
