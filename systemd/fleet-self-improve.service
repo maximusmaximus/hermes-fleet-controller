@@ -4,6 +4,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+Nice=19
 ExecStart=/usr/bin/python3 /opt/fleet/bin/fleet-self-improve.py
 WorkingDirectory=/home/molt/hermes-fleet-controller
 User=root

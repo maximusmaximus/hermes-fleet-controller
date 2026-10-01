@@ -5,6 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+Nice=-5
 Restart=always
 RestartSec=5
 TimeoutStartSec=180

@@ -101,13 +101,28 @@ def get_system_metrics():
 
     mem_used_pct = round(((mem_total_mb - mem_avail_mb) / mem_total_mb) * 100, 1) if mem_total_mb else 0.0
 
+    # Time Synchronization (VBoxService / VirtualBox Host Sync)
+    time_synced = True
+    try:
+        ts_check = subprocess.run(
+            ["timedatectl", "show", "--property=NTPSynchronized"],
+            capture_output=True, text=True, timeout=2
+        )
+        if "NTPSynchronized=no" in ts_check.stdout:
+            time_synced = False
+            # Self-heal time sync: ensure virtualbox-guest-utils is active
+            subprocess.run(["systemctl", "restart", "virtualbox-guest-utils.service"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
     return {
         "load": f"{load1:.2f}, {load5:.2f}, {load15:.2f}",
         "disk_free_gb": round(free_gb, 1),
         "disk_used_pct": used_pct,
         "mem_total_mb": mem_total_mb,
         "mem_avail_mb": mem_avail_mb,
-        "mem_used_pct": mem_used_pct
+        "mem_used_pct": mem_used_pct,
+        "time_synced": time_synced
     }
 
 
@@ -228,6 +243,52 @@ def probe_agent(name):
     except Exception as e:
         result["status"] = "failed"
         result["diagnosis"] = f"Gateway probe error: {str(e)[:50]}"
+
+    # 4. Telegram Platform State & Polling Probe (for messaging agents)
+    agent_dir = os.path.join(AGENTS_DIR, name)
+    gw_state_file = os.path.join(agent_dir, "gateway_state.json")
+    if result["status"] in ("healthy", "degraded") and os.path.exists(gw_state_file):
+        try:
+            with open(gw_state_file, "r", encoding="utf-8") as f:
+                gw_data = json.load(f)
+            platforms = gw_data.get("platforms", {})
+            tg_info = platforms.get("telegram")
+            if isinstance(tg_info, dict):
+                tg_state = (tg_info.get("state") or "").lower()
+                if tg_state in ("error", "disconnected", "retrying"):
+                    result["status"] = "failed"
+                    result["diagnosis"] = f"Telegram bot platform in '{tg_state}' state: {tg_info.get('error_message') or 'polling halted'}."
+                    return result
+        except Exception:
+            pass
+
+    # 4b. Check recent error log for stuck long-polling heartbeat
+    err_log = os.path.join(agent_dir, "logs", "errors.log")
+    if result["status"] in ("healthy", "degraded") and os.path.exists(err_log):
+        try:
+            if time.time() - os.path.getmtime(err_log) < 300:
+                with open(err_log, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()[-40:]
+                for l in reversed(lines):
+                    if "Telegram polling heartbeat: 1 update(s) queued but not consumed" in l:
+                        result["status"] = "failed"
+                        result["diagnosis"] = "Telegram polling loop stuck (heartbeat unconsumed update detected)."
+                        return result
+        except Exception:
+            pass
+
+    # 5. Integration probe (specific to ha-agent / HAMagnolia)
+    if name == "ha-agent" and result["status"] in ("healthy", "degraded"):
+        try:
+            ha_check = subprocess.run(
+                podman_cmd("exec", cname, "curl", "-sI", "-m", "2", "http://192.168.50.106:8123/manifest.json"),
+                capture_output=True, text=True, timeout=3
+            )
+            if ha_check.returncode != 0 and "HTTP/" not in ha_check.stdout:
+                result["status"] = "degraded"
+                result["diagnosis"] = "Home Assistant core (192.168.50.106:8123) unreachable from container."
+        except Exception:
+            pass
 
     return result
 
