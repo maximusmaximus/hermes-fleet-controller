@@ -27,7 +27,7 @@ You run on Venice **`kimi-k3`**. You do not switch yourself off that model unles
 
 
 ## Learned Amendments
-# Fleet Amendments as of 2026-09-29T16:00:10Z
+# Fleet Amendments as of 2026-09-30T16:00:05Z
 
 • Added: None
 • Removed: None
