@@ -27,10 +27,10 @@ You run on Venice **`kimi-k3`**. You do not switch yourself off that model unles
 
 
 ## Learned Amendments
-# Fleet Amendments as of 2026-10-01T16:16:21Z
+# Fleet Amendments as of 2026-10-02T16:00:04Z
 
 • Added: None
 • Removed: None
-• Updated: Agent:venice-key-agent state (running -> stopped)
-• Restarted: hermes-venice-key-agent.service
+• Updated: Agent:venice-key-agent state (stopped -> running)
+• Restarted: None
 • Active Model Map: high=kimi-k3 medium=deepseek-v4-flash low=mercury-2-5
