@@ -264,13 +264,57 @@ def probe_agent(name):
 
     # 4b. Check recent error log for stuck long-polling heartbeat
     err_log = os.path.join(agent_dir, "logs", "errors.log")
+    gw_log = os.path.join(agent_dir, "logs", "gateway.log")
     if result["status"] in ("healthy", "degraded") and os.path.exists(err_log):
         try:
-            if time.time() - os.path.getmtime(err_log) < 300:
+            if time.time() - os.path.getmtime(err_log) < 180:
                 with open(err_log, "r", encoding="utf-8", errors="ignore") as f:
-                    lines = f.readlines()[-40:]
-                for l in reversed(lines):
+                    err_lines = f.readlines()[-40:]
+
+                heartbeat_stuck = False
+                heartbeat_stuck_time = None
+
+                for l in reversed(err_lines):
+                    if any(rec in l for rec in (
+                        "Connected to Telegram (polling mode)",
+                        "Telegram polling confirmed healthy",
+                        "Telegram polling recovered"
+                    )):
+                        break
+
                     if "Telegram polling heartbeat: 1 update(s) queued but not consumed" in l:
+                        try:
+                            ts_str = l[:19]
+                            log_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                            if (datetime.utcnow() - log_dt).total_seconds() < 90:
+                                heartbeat_stuck = True
+                                heartbeat_stuck_time = log_dt
+                        except Exception:
+                            pass
+                        break
+
+                if heartbeat_stuck:
+                    recovered = False
+                    if os.path.exists(gw_log):
+                        with open(gw_log, "r", encoding="utf-8", errors="ignore") as f:
+                            gw_lines = f.readlines()[-30:]
+                        for gl in reversed(gw_lines):
+                            if any(rec in gl for rec in (
+                                "Connected to Telegram (polling mode)",
+                                "Telegram polling confirmed healthy",
+                                "Telegram polling recovered",
+                                "response ready: platform=telegram",
+                                "inbound message: platform=telegram"
+                            )):
+                                try:
+                                    g_dt = datetime.strptime(gl[:19], "%Y-%m-%d %H:%M:%S")
+                                    if heartbeat_stuck_time and g_dt >= heartbeat_stuck_time:
+                                        recovered = True
+                                        break
+                                except Exception:
+                                    recovered = True
+                                    break
+                    if not recovered:
                         result["status"] = "failed"
                         result["diagnosis"] = "Telegram polling loop stuck (heartbeat unconsumed update detected)."
                         return result
@@ -337,9 +381,9 @@ def self_heal_agent(probe_res, history):
     t0 = time.time()
     ret = subprocess.call(systemctl_cmd("restart", unit_name), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
-    # 3. Grace period polling for container & gateway startup (up to 12s)
+    # 3. Grace period polling for container & gateway startup (up to 30s)
     post_probe = None
-    for attempt in range(6):
+    for attempt in range(15):
         time.sleep(2)
         post_probe = probe_agent(name)
         if post_probe["status"] in ("healthy", "degraded"):
