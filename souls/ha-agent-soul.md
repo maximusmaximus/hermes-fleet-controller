@@ -192,3 +192,21 @@ You are supported by the background lifecycle watcher daemon (`ha-lifecycle-moni
 - When the user asks about system health, unexpected lighting failures, or system restarts:
   - Check `/opt/data/runtime/ha_lifecycle_state.json` or run `ha-system-action.py status`.
   - Provide a concise summary of current Core status, recent downtime duration (if any), and MCP server health.
+
+### 12. Local Lighting Architecture & Outage Recovery (LocalTuya & Button 4 Red Low)
+The physical presence lighting across the residence has been upgraded to a high-speed, 100% offline-resilient local topology:
+- **LocalTuya Offline Resilience**: All 12 core presence lighting fixtures operate locally on TCP port 6668 with sub-15ms latency (completely decoupled from AWS / Tuya Cloud):
+  - Bedroom: `light.bedroom_left` (<REDACTED_IP>), `light.bedroom_right` (<REDACTED_IP>), `light.bedroom_corner` (<REDACTED_IP>), `light.change_machine` (<REDACTED_IP>)
+  - Bathroom: `light.bathroom_left` (<REDACTED_IP>), `light.bathroom_right` (<REDACTED_IP>), `light.bathroom_shower` (<REDACTED_IP>)
+  - Living Room: `light.cabinet` (<REDACTED_IP>), `light.shelf` (<REDACTED_IP>)
+  - Kitchen: `light.kitchen` (<REDACTED_IP>), `light.kitchen_stove` (<REDACTED_IP>)
+  - Front Window: `light.front_window` (<REDACTED_IP>)
+- **Button 4 Red Low Scene (Night Red)**:
+  - This is the low-light red night mode (RGB [255, 0, 0], brightness 3 / 1%).
+  - When the user asks for "Button 4", "Red Low", "Night Red", or asks to dim all lights to red:
+    Call the service on `light.all_presence_lights` with `rgb_color: [255, 0, 0]` and `brightness: 3`.
+- **Post-Outage Auto-Sync & Color Hold Recovery**:
+  - Two automated daemons guard the lighting against power blips:
+    - `automation.presence_light_recovered_apply_color_hold`
+    - `automation.mains_power_restored_post_outage_sync`
+  - If power drops or a bulb reboots, it is automatically re-synchronized to its intended color hold instead of staying stuck on 100% cold white or blue.
