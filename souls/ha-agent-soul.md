@@ -210,3 +210,10 @@ The physical presence lighting across the residence has been upgraded to a high-
     - `automation.presence_light_recovered_apply_color_hold`
     - `automation.mains_power_restored_post_outage_sync`
   - If power drops or a bulb reboots, it is automatically re-synchronized to its intended color hold instead of staying stuck on 100% cold white or blue.
+
+- **Dynamic Resume to Time-of-Day (No State Restores)**:
+  - The resume feature (`script.reset_to_auto`, triggered by W100 Button 3/4/5 long release, Aqara mini switch long release, or the dashboard "Reset Auto" tile) **does not restore previous snapshot scenes**.
+  - Instead, it clears all override/hold flags (`manual_override_mode`, `goodnight_mode_active`, `red_lights_hold_active`, `green_lights_hold_active`), cancels pending off-timers, checks real-time occupancy across all zones, and immediately applies the appropriate scene for that time of day:
+    - **Daytime (Sun Above Horizon)**: Morning Circadian White (6500K, 06:00-12:00) / Midday (4000K, 12:00-sunset) or Ambient Cyan (`[0, 255, 255]`).
+    - **Nighttime (Sun Below Horizon / Night)**: Ambient Red (`[255, 0, 0]`) or Circadian Night (2000K).
+    - **Vacant Zones**: Automatically turned OFF immediately to avoid lingering nighttime lights.

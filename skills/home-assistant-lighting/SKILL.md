@@ -39,3 +39,15 @@ Turning on a whole domain can bump the brightness of lights that were already on
 - Report counts as verified facts from the post-action read, not from command responses.
 - Name which lights could not be reached.
 - Flag anything that differs from the requested outcome instead of quietly claiming success.
+
+## LocalTuya Architecture (12 Presence Fixtures)
+The 12 primary presence fixtures are controlled via LocalTuya direct TCP (port 6668) with sub-15ms latency and zero cloud dependency:
+- Bedroom: `light.bedroom_left`, `light.bedroom_right`, `light.bedroom_corner`, `light.change_machine`
+- Bathroom: `light.bathroom_left`, `light.bathroom_right`, `light.bathroom_shower`
+- Living Room: `light.cabinet`, `light.shelf`
+- Kitchen: `light.kitchen`, `light.kitchen_stove`
+- Front Window: `light.front_window`
+
+### Button 4 Red Low Scene
+- Setting `light.all_presence_lights` to `rgb_color: [255, 0, 0]` and `brightness: 3` (or triggering Button 4 on Aqara W100) sets the residence to Night Red mode.
+- Post-outage recovery automations (`automation.presence_light_recovered_apply_color_hold`) ensure bulbs do not get stuck on cold white/blue if an AC glitch occurs.
