@@ -64,14 +64,14 @@ if [ "$DRY_RUN" = true ]; then
   echo "• Utilization: ${PRE_PCT}%"
   echo "• Available: ${PRE_AVAIL_HUMAN}"
   echo "• Threshold: ${THRESHOLD_PCT}% (Trigger: $([ "$PRE_PCT" -ge "$THRESHOLD_PCT" ] && echo "YES" || echo "NO"))"
-  echo "• Actions that would execute: pnpm store prune, podman container prune, podman image prune, journalctl vacuum (3d)"
+  echo "• Actions that would execute: pnpm/npm cache prune, user build caches, apt clean, disabled snap revisions, podman container/image prune, journalctl vacuum (3d)"
   exit 0
 fi
 
 # 3. Execution Phase
 echo "Executing safe fleet storage cleanup..."
 
-# 3a. PNPM Store Prune (clean root and dynamic user stores)
+# 3a. PNPM & NPM Store Prune (clean root and dynamic user stores)
 if command -v pnpm >/dev/null 2>&1; then
   pnpm store prune >/dev/null 2>&1 || true
   for udir in /home/*; do
@@ -83,6 +83,10 @@ if command -v pnpm >/dev/null 2>&1; then
     fi
   done
 fi
+
+sudo rm -rf /root/.npm/_cacache /home/*/.npm/_cacache 2>/dev/null || true
+sudo rm -rf /home/*/.cache/mozilla /home/*/.cache/node-gyp /home/*/.cache/pip /home/*/.cache/thumbnails 2>/dev/null || true
+sudo rm -rf /home/*/.openclaw/logs/stability/* 2>/dev/null || true
 
 # 3b. Podman dead containers (root / sudo)
 if command -v podman >/dev/null 2>&1; then
@@ -99,6 +103,23 @@ fi
 
 # 3d. Ephemeral /tmp builds (>24h old pnpm/npm/mcp build artifacts)
 find /tmp -mindepth 1 -maxdepth 2 -type d \( -name "pnpm-*" -o -name "npm-*" -o -name "mcp-build-*" \) -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+
+# 3e. APT Package Cache & Unused Dependencies
+if command -v apt-get >/dev/null 2>&1; then
+  sudo apt-get clean >/dev/null 2>&1 || true
+  sudo apt-get autoremove -y >/dev/null 2>&1 || true
+fi
+
+# 3f. Disabled Snap Revisions & Snap Cache
+if command -v snap >/dev/null 2>&1; then
+  sudo snap set system refresh.retain=2 >/dev/null 2>&1 || true
+  LANG=C snap list --all 2>/dev/null | awk '/disabled/{print $1, $3}' | while read -r snapname revision; do
+    if [ -n "$snapname" ] && [ -n "$revision" ]; then
+      sudo snap remove "$snapname" --revision="$revision" >/dev/null 2>&1 || true
+    fi
+  done
+  sudo find /var/lib/snapd/cache -mindepth 1 -delete 2>/dev/null || true
+fi
 
 # 4. Post-Clean Audit
 POST_PCT=$(get_used_pct)
@@ -125,7 +146,7 @@ REPORT=$(cat <<EOF
 • Pre-Clean Available: ${PRE_AVAIL_HUMAN} (${PRE_PCT}% used)
 • Post-Clean Available: ${POST_AVAIL_HUMAN} (${POST_PCT}% used)
 • Space Reclaimed: ${RECLAIMED_HUMAN}
-• Cleaned Targets: pnpm store cache, dead containers, dangling layers, journals (3d), /tmp builds
+• Cleaned Targets: pnpm/npm caches, user build caches, apt cache, disabled snaps, dead containers, dangling layers, journals (3d), /tmp builds
 EOF
 )
 

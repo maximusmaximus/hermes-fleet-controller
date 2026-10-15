@@ -146,14 +146,21 @@ def diagnose_with_venice(errors):
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,
-            "max_tokens": 500
+            "max_tokens": 1000
         }).encode("utf-8")
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=25) as resp:
         res = json.loads(resp.read().decode("utf-8"))
-        raw_text = res["choices"][0]["message"]["content"].strip()
+        msg = (res.get("choices") or [{}])[0].get("message") or {}
+        raw_text = (msg.get("content") or msg.get("reasoning_content") or "").strip()
+        if not raw_text:
+            raise ValueError("Empty content returned from Venice LLM")
         if raw_text.startswith("```"):
             raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        start_idx = raw_text.find("{")
+        end_idx = raw_text.rfind("}")
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            raw_text = raw_text[start_idx:end_idx + 1]
         return json.loads(raw_text)
 
 def execute_action(action_type):

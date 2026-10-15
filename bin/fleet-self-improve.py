@@ -75,6 +75,17 @@ def provision_dedicated_improver_key():
 
 def submit_github_issue(title, body):
     """Submits weekly operations & feedback issue to GitHub repository."""
+    try:
+        subprocess.run(
+            ["gh", "label", "create", "fleet-feedback", "--description", "Autonomous weekly fleet feedback digest", "--color", "0E8A16", "--force"],
+            cwd=REPO_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15
+        )
+    except Exception:
+        pass
+
     cmd = [
         "gh", "issue", "create",
         "--title", title,
@@ -84,8 +95,13 @@ def submit_github_issue(title, body):
     try:
         url = subprocess.check_output(cmd, cwd=REPO_DIR, stderr=subprocess.STDOUT).decode("utf-8").strip()
         return url
-    except Exception as e:
-        return f"Issue creation skipped/failed: {str(e)}"
+    except Exception:
+        try:
+            fallback_cmd = ["gh", "issue", "create", "--title", title, "--body", body]
+            url = subprocess.check_output(fallback_cmd, cwd=REPO_DIR, stderr=subprocess.STDOUT).decode("utf-8").strip()
+            return url
+        except Exception as e:
+            return f"Issue creation skipped/failed: {str(e)}"
 
 
 def run_py_compile_check():
