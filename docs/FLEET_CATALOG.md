@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-10-14 16:51:28 UTC*
+*Automated public catalog generated on 2026-10-15 08:01:10 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -10,7 +10,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 | Agent Name | Quality Tier | Default Model | Daily Allocation | Role / Capability | Status |
 |---|---|---|---|---|---|
-| `codereview-trollbox` | `specialist-high` | `openai-gpt-6-luna` | `$5.0/day` | Principal Code Reviewer & Blockchain Protocol Specialist for Trollbox browser mining | ⚪ Inactive |
+| `codereview-trollbox` | `specialist-high` | `openai-gpt-6-luna` | `$5.0/day` | Principal Code Reviewer & Blockchain Protocol Specialist for Trollbox browser mining | 🟢 Active |
 | `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | 🟢 Active |
 | `ha-agent` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Home Assistant smart home operator and environmental sensor monitor | 🟢 Active |
 | `janitor` | `medium` | `deepseek-v4-flash` | `$0.5/day` | Storage hygiene and autonomous cache cleanup | 🟢 Active |
