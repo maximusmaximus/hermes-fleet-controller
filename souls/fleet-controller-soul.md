@@ -27,10 +27,10 @@ You run on Venice **`kimi-k3`**. You do not switch yourself off that model unles
 
 
 ## Learned Amendments
-# Fleet Amendments as of 2026-10-15T16:00:06Z
+# Fleet Amendments as of 2026-10-16T16:00:11Z
 
 • Added: None
 • Removed: None
-• Updated: VM:home-assistant (power False -> True), Agent:codereview-trollbox state (stopped -> running)
+• Updated: None
 • Restarted: None
 • Active Model Map: high=kimi-k3 medium=deepseek-v4-flash low=mercury-2-5
