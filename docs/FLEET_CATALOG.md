@@ -1,6 +1,6 @@
 # Hermes Fleet Agent & Skill Catalog
 
-*Automated public catalog generated on 2026-11-10 22:47:41 UTC*
+*Automated public catalog generated on 2026-11-11 08:01:02 UTC*
 
 This catalog details the registered agent personas, tier allocations, and available skill modules in the Hermes Fleet. All private network topologies, credentials, and user data have been de-identified.
 
@@ -10,7 +10,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 | Agent Name | Quality Tier | Default Model | Daily Allocation | Role / Capability | Status |
 |---|---|---|---|---|---|
-| `codereview-trollbox` | `specialist-high` | `openai-gpt-6-luna` | `$5.0/day` | Principal Code Reviewer & Blockchain Protocol Specialist for Trollbox browser mining | ⚪ Inactive |
+| `codereview-trollbox` | `specialist-high` | `openai-gpt-6-luna` | `$5.0/day` | Principal Code Reviewer & Blockchain Protocol Specialist for Trollbox browser mining | 🟢 Active |
 | `fleet-controller` | `high` | `kimi-k3` | `Primary Admin Key` | Fleet Orchestration, Monitoring & Key Allocation | 🟢 Active |
 | `ha-agent` | `medium` | `deepseek-v4-flash` | `$2.0/day` | Home Assistant smart home operator and environmental sensor monitor | 🟢 Active |
 | `janitor` | `medium` | `deepseek-v4-flash` | `$0.5/day` | Storage hygiene and autonomous cache cleanup | 🟢 Active |
@@ -21,7 +21,7 @@ This catalog details the registered agent personas, tier allocations, and availa
 
 ## Fleet Skill Library
 
-Total registered skills: **75**
+Total registered skills: **76**
 
 | Skill Module | Description & Entrypoint |
 |---|---|
@@ -66,6 +66,7 @@ Total registered skills: **75**
 | [`manim-video`](../skills/manim-video/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`maps`](../skills/maps/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`meeting-action-items`](../skills/meeting-action-items/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
+| [`microsoft-office`](../skills/microsoft-office/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`node-inspect-debugger`](../skills/node-inspect-debugger/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`notion`](../skills/notion/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
 | [`obsidian`](../skills/obsidian/SKILL.md) | Standard Hermes Skill pack with declarative execution instructions |
