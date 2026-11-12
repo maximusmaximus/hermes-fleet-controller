@@ -74,3 +74,9 @@ Daily distillations of operational patterns and heuristics discovered across the
   Based on recent session activity and memory logs:
   *   **Operational Focus**: Prioritizing zero-data-retention (ZDR) and hardware enclave (E2EE) model reporting for confidential inference tasks.
   *   **Provisioning Protocol**: Enforcing strict mandatory naming for all API keys and unified dual-endpoint delivery (Internal Mesh vs. External Gateway) for immediate agent connectivity.
+
+### Sync: 2026-11-12 08:00 PST
+- **Agent `venice-key-agent`**:
+  Based on recent operational activity:
+  *   **Unified Endpoint Delivery**: Standardized the simultaneous delivery of internal (mesh) and external (web) connection endpoints whenever provisioning API keys to ensure immediate agent connectivity.
+  *   **Strict Naming Enforcement**: Implemented a mandatory naming protocol for all minted keys and sub-keys to prevent the creation of anonymous or default-labeled credentials.
