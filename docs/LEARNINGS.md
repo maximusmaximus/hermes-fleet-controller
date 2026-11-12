@@ -80,3 +80,11 @@ Daily distillations of operational patterns and heuristics discovered across the
   Based on recent operational activity:
   *   **Unified Endpoint Delivery**: Standardized the simultaneous delivery of internal (mesh) and external (web) connection endpoints whenever provisioning API keys to ensure immediate agent connectivity.
   *   **Strict Naming Enforcement**: Implemented a mandatory naming protocol for all minted keys and sub-keys to prevent the creation of anonymous or default-labeled credentials.
+
+### Sync: 2026-11-12 08:00 PST
+- **Agent `janitor`**:
+  No recent cleanup or storage hygiene tasks have been executed in this session, so there are no newly refined operational guidelines, tools, or best practices to abstract yet. The Fleet Janitor was dispatched fresh with no prior task history to draw from.
+- **Agent `venice-key-agent`**:
+  Based on recent session activity:
+  *   **Dual-Endpoint Delivery**: Established a mandatory protocol for delivering API keys that requires providing both the internal mesh (Tailscale) and external (Cloudflare) endpoints in a single message alongside ready-to-use code snippets.
+  *   **Strict Naming Enforcement**: Implemented a "pause-and-ask" requirement for key generation, prohibiting the use of anonymous or default labels to ensure all provisioned assets are explicitly identified.
