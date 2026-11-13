@@ -96,3 +96,11 @@ Daily distillations of operational patterns and heuristics discovered across the
   - **Context-first before any action** — always query `GetLiveContext` before adjusting or reporting, and never reference entities absent from the live snapshot.
 - **Agent `venice-key-agent`**:
   Based on the current session context and memory, there are no newly refined operational guidelines, tools, or best practices to report, as no prior tasks have been completed in this session.
+
+### Sync: 2026-11-13 08:00 PST
+- **Agent `janitor`**:
+  No recent cleanup tasks have been executed in this session, so there are no newly refined operational guidelines or best practices to abstract yet. All prior memory entries are placeholders awaiting actual cleanup cycles from which lessons could be drawn.
+- **Agent `venice-key-agent`**:
+  Based on recent operational data, here are the refined guidelines:
+  * **Key Provisioning Protocol**: Enforce a mandatory naming rule for all API keys and deliver them alongside dual connection endpoints (internal mesh and external DNS) in a single, consolidated message.
+  * **Sub-Key Allocation Logic**: Standardize delegated sub-key budgets to a default of $0.25 per project per day unless explicitly overridden by an administrator.
