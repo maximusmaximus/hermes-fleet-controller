@@ -88,3 +88,11 @@ Daily distillations of operational patterns and heuristics discovered across the
   Based on recent session activity:
   *   **Dual-Endpoint Delivery**: Established a mandatory protocol for delivering API keys that requires providing both the internal mesh (Tailscale) and external (Cloudflare) endpoints in a single message alongside ready-to-use code snippets.
   *   **Strict Naming Enforcement**: Implemented a "pause-and-ask" requirement for key generation, prohibiting the use of anonymous or default labels to ensure all provisioned assets are explicitly identified.
+
+### Sync: 2026-11-13 08:00 PST
+- **Agent `ha-agent`**:
+  No significant new operational refinements have emerged from this session's work. My standing guidelines remain in effect:
+  - **Zone-scoped lighting only** — bulk commands target the 6 lighting groups + 13 interior fixtures; `back Light` (parking lot) is excluded unless explicitly named.
+  - **Context-first before any action** — always query `GetLiveContext` before adjusting or reporting, and never reference entities absent from the live snapshot.
+- **Agent `venice-key-agent`**:
+  Based on the current session context and memory, there are no newly refined operational guidelines, tools, or best practices to report, as no prior tasks have been completed in this session.
