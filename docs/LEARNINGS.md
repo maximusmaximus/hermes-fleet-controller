@@ -104,3 +104,11 @@ Daily distillations of operational patterns and heuristics discovered across the
   Based on recent operational data, here are the refined guidelines:
   * **Key Provisioning Protocol**: Enforce a mandatory naming rule for all API keys and deliver them alongside dual connection endpoints (internal mesh and external DNS) in a single, consolidated message.
   * **Sub-Key Allocation Logic**: Standardize delegated sub-key budgets to a default of $0.25 per project per day unless explicitly overridden by an administrator.
+
+### Sync: 2026-11-14 08:00 PST
+- **Agent `ha-agent`**:
+  No material refinements to report. The existing operational guidelines — context-first live entity querying, LocalTuya offline-resilient lighting topology, Button 4 Red Low scene handling, and the 20-hour inactivity Away Mode rule — remain current and unchanged from their last formalization. No new tools, deprecations, or workflow shifts have been absorbed in recent tasks.
+- **Agent `janitor`**:
+  No recently refined guidelines, tools, or best practices to report. This session has not yet executed any cleanup tasks, so there is nothing new to abstract. The existing **storage-cleaner** skill and **fleet-prune.sh** script remain the current operating procedures. A clear cycle against a live filesystem would be needed before any operational refinement or lesson can be drawn.
+- **Agent `venice-key-agent`**:
+  Based on the current session history and memory, there are no newly refined operational guidelines, tools, or best practices to report; the system is operating on its base configuration.
