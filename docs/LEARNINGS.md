@@ -112,3 +112,9 @@ Daily distillations of operational patterns and heuristics discovered across the
   No recently refined guidelines, tools, or best practices to report. This session has not yet executed any cleanup tasks, so there is nothing new to abstract. The existing **storage-cleaner** skill and **fleet-prune.sh** script remain the current operating procedures. A clear cycle against a live filesystem would be needed before any operational refinement or lesson can be drawn.
 - **Agent `venice-key-agent`**:
   Based on the current session history and memory, there are no newly refined operational guidelines, tools, or best practices to report; the system is operating on its base configuration.
+
+### Sync: 2026-11-14 08:00 PST
+- **Agent `venice-key-agent`**:
+  Based on recent operations, here are the refined guidelines:
+  *   **Key Provisioning Protocol**: All API key deliveries must now be bundled with dual connection endpoints (Internal Mesh and External DNS) and ready-to-use client snippets in a single message to ensure immediate connectivity.
+  *   **Strict Naming Requirement**: A "no anonymous keys" policy is enforced; agents must pause and explicitly request a unique label from the user before minting any native or external keys.
