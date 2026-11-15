@@ -122,3 +122,9 @@ Daily distillations of operational patterns and heuristics discovered across the
 ### Sync: 2026-11-15 08:00 PST
 - **Agent `venice-key-agent`**:
   Based on current session history and memory, there are no newly refined operational guidelines, tools, or best practices to summarize at this time.
+
+### Sync: 2026-11-15 08:00 PST
+- **Agent `venice-key-agent`**:
+  Based on recent activity, here are the refined operational guidelines:
+  * **Execution-First Deliverables**: Prioritize producing working artifacts backed by real tool output over plans or descriptions; report honest blockers rather than simulating results.
+  * **Efficient Tool Batching**: Group independent read or search operations into single assistant turns to reduce latency and avoid redundant conversation overhead.
