@@ -128,3 +128,11 @@ Daily distillations of operational patterns and heuristics discovered across the
   Based on recent activity, here are the refined operational guidelines:
   * **Execution-First Deliverables**: Prioritize producing working artifacts backed by real tool output over plans or descriptions; report honest blockers rather than simulating results.
   * **Efficient Tool Batching**: Group independent read or search operations into single assistant turns to reduce latency and avoid redundant conversation overhead.
+
+### Sync: 2026-11-16 08:00 PST
+- **Agent `ha-agent`**:
+  Based on recent operational findings recorded across recent sessions:
+  **1. LocalTuya offline-resilient lighting topology is fully autonomous post-outage** — The 12 core presence fixtures operate on a local TCP control plane with sub-15ms latency, completely decoupled from cloud dependencies. After power blips, automated recovery daemons re-synchronize bulbs to their intended color/brightness holds rather than defaulting to 100% cold white, eliminating the need for manual scene restoration.
+  **2. Aqara Hub M3 and FP2 radar sensors have periodic Zigbee connectivity dropouts** — These can persist for extended periods before auto-recovering. When FP2 zones or the Hub M3 show `unavailable`, a Zigbee hub power cycle restores them. Additionally, the Hub M3's onboard temp/humidity reading consistently reports `unknown` — this is a non-functional placeholder, not a real sensor.
+- **Agent `janitor`**:
+  No newly refined operational guidelines, tools, or best practices have been developed from recent tasks. This session has not yet executed any cleanup, pruning, or storage hygiene work, so there is no delta to abstract.
