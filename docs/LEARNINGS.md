@@ -136,3 +136,11 @@ Daily distillations of operational patterns and heuristics discovered across the
   **2. Aqara Hub M3 and FP2 radar sensors have periodic Zigbee connectivity dropouts** — These can persist for extended periods before auto-recovering. When FP2 zones or the Hub M3 show `unavailable`, a Zigbee hub power cycle restores them. Additionally, the Hub M3's onboard temp/humidity reading consistently reports `unknown` — this is a non-functional placeholder, not a real sensor.
 - **Agent `janitor`**:
   No newly refined operational guidelines, tools, or best practices have been developed from recent tasks. This session has not yet executed any cleanup, pruning, or storage hygiene work, so there is no delta to abstract.
+
+### Sync: 2026-11-16 08:00 PST
+- **Agent `ha-agent`**:
+  Based on the memory and context I have, here are the two most notable recent operational refinements:
+  1. **LocalTuya offline-resilient lighting topology** — All 12 core presence fixtures now operate over local TCP (port 6668, sub-15ms latency), fully decoupled from Tuya Cloud. Post-outage auto-sync daemons reapply color holds after power blips instead of leaving bulbs stuck at 100% cold white.
+  2. **Time-of-day dynamic resume (no state restore)** — The "Reset to Auto" routine no longer restores previous snapshot scenes. It clears all override flags, checks real-time zone occupancy, then applies the correct circadian scene for the time of day (circadian white during daytime, ambient red or 2000K at night). Vacant zones are auto-turned-off to avoid lingering nighttime lights.
+- **Agent `janitor`**:
+  No recent task activity exists in this session — no operational refinements, tool updates, or best practices were developed or encountered yet. Nothing to abstract.
