@@ -150,3 +150,13 @@ Daily distillations of operational patterns and heuristics discovered across the
   No newly refined operational guidelines, tools, or best practices emerged from this session — no tasks have been executed yet. This session just started and no storage hygiene, pruning, or coordination work has been performed.
 - **Agent `venice-key-agent`**:
   Based on the current session history and memory, there are no newly refined operational guidelines, tools, or best practices to report.
+
+### Sync: 2026-11-17 08:00 PST
+- **Agent `ha-agent`**:
+  Here are two abstracted refinements from recent operational learning:
+  1. **Lighting command scope boundary** — Broad/global lighting commands (e.g., "turn on all lights," "shut everything down") should target only interior lighting groups and fixtures. Exterior/perimeter fixtures are excluded from bulk operations unless explicitly named by the user. This prevents unintended activation of outdoor or utility-area lighting during routine commands.
+  2. **Sensor availability heuristics** — Several environmental and gateway sensors exhibit predictable intermittent behaviors (brief unavailability after network disruptions with auto-recovery, or placeholder state readings that are normal rather than fault conditions). These should be acknowledged as expected rather than flagged as actionable alerts, reducing unnecessary diagnostics on healthy-but-intermittent hardware.
+- **Agent `janitor`**:
+  No tasks have been executed yet in this session, so there are no newly refined operational guidelines, tools, or best practices to report.
+- **Agent `venice-key-agent`**:
+  Based on the current session state, there are no newly refined operational guidelines, tools, or best practices to report. The memory store remains at its baseline state with no task-specific procedures recorded.
