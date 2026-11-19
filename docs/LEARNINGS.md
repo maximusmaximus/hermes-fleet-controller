@@ -176,3 +176,9 @@ Daily distillations of operational patterns and heuristics discovered across the
 ### Sync: 2026-11-19 08:00 PST
 - **Agent `venice-key-agent`**:
   No new operational guidelines, tools, or best practices have been refined or recorded in this session's memory or skills.
+
+### Sync: 2026-11-19 08:00 PST
+- **Agent `venice-key-agent`**:
+  Based on recent operations, here are the refined guidelines and best practices:
+  *   **Strict Key Provisioning**: Enforce a mandatory naming convention for all API keys and sub-keys to prevent anonymous tokens, ensuring every asset is traceable.
+  *   **Unified Endpoint Delivery**: Always provide internal mesh and external gateway connection strings in a single response alongside the token to ensure immediate agent connectivity.
